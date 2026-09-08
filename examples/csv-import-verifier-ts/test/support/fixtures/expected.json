@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "accepted": [
+    { "sourceRow": 2, "customer_id": "0017", "name": "Ada Lovelace", "note": "Priority customer, email first" },
+    { "sourceRow": 3, "customer_id": "00042", "name": "Renée", "note": "Said \"hello\"" },
+    { "sourceRow": 4, "customer_id": "C-003", "name": "李 明", "note": "Line one\nLine two" },
+    { "sourceRow": 5, "customer_id": "C-004", "name": "Sam", "note": "" },
+    { "sourceRow": 6, "customer_id": "C-005", "name": "A & B <script>alert(1)</script>", "note": "Synthetic HTML escaping check" },
+    { "sourceRow": 7, "customer_id": "C-006", "name": "Zoë", "note": "  keep spaces  " }
+  ],
+  "rejected": [
+    { "sourceRow": 8, "customer_id": "0017", "reason": "DUPLICATE_ID" }
+  ]
+}

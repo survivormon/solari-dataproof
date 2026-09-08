@@ -1,0 +1,3 @@
+test/support/fixtures/** text eol=lf
+test/support/fixtures/customers.csv whitespace=-blank-at-eol
+demo/* text eol=lf

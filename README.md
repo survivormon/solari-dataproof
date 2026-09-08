@@ -18,6 +18,7 @@ past. Copy one into your project and change the parts you care about.
 | [browser-stealth-proxy-ts](examples/browser-stealth-proxy-ts) | TypeScript | Stealth mode + residential proxy egress |
 | [browser-profiles-ts](examples/browser-profiles-ts) | TypeScript | Log in once, reuse the session forever |
 | [browser-session-recording-py](examples/browser-session-recording-py) | Python | Record a session, download the replay |
+| [csv-import-verifier-ts](examples/csv-import-verifier-ts) | TypeScript | Check CSV round-trip integrity with a browser and sandbox |
 
 ### Sandbox
 

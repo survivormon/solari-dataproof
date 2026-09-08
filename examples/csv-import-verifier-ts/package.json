@@ -1,0 +1,28 @@
+{
+  "name": "solari-csv-import-verifier",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "tsx index.ts",
+    "local": "tsx src/spreadsheet-cli.ts",
+    "solari:recover": "tsx src/recovery-cli.ts",
+    "spreadsheet:install": "tsx src/spreadsheet-install.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "test:e2e": "tsx --test --test-concurrency=1 test/*.e2e.ts",
+    "browser:install": "playwright install chromium"
+  },
+  "dependencies": {
+    "@solarisdk/core": "0.1.3",
+    "csv-parse": "7.0.2",
+    "patchright-core": "1.62.2",
+    "playwright": "1.62.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.1",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}

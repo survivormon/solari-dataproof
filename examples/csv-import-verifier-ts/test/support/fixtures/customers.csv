@@ -1,0 +1,9 @@
+customer_id,name,note
+0017,Ada Lovelace,"Priority customer, email first"
+00042,Renée,"Said ""hello"""
+C-003,李 明,"Line one
+Line two"
+C-004,Sam,
+C-005,A & B <script>alert(1)</script>,Synthetic HTML escaping check
+C-006,Zoë,  keep spaces  
+0017,Duplicate Ada,Must be rejected

@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "crm-text",
+      "csv": "source_row,customer_id,name,note\n2,000017,Renée 李,Call after 17:00\n3,9007199254740993,Zoë,\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 2, "customer_id": "000017", "name": "Renée 李", "note": "Call after 17:00" },
+        { "sourceRow": 3, "customer_id": "9007199254740993", "name": "Zoë", "note": "" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "PASS", "differences": [] },
+      "patched": { "outcome": "PASS", "differences": [] }
+    },
+    {
+      "id": "quoted-notes",
+      "csv": "source_row,customer_id,name,note\n2,C-200,\"North, Inc.\",\"Said \"\"ship now\"\"\"\n3,C-201,Warehouse 2,\"Address line one\nAddress line two\"\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 2, "customer_id": "C-200", "name": "North, Inc.", "note": "Said \"ship now\"" },
+        { "sourceRow": 3, "customer_id": "C-201", "name": "Warehouse 2", "note": "Address line one\nAddress line two" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "PASS", "differences": [] },
+      "patched": { "outcome": "PASS", "differences": [] }
+    },
+    {
+      "id": "windows-crlf",
+      "csv": "source_row,customer_id,name,note\r\n2,000042,Windows export,\"Address line one\r\nAddress line two\"\r\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 2, "customer_id": "000042", "name": "Windows export", "note": "Address line one\r\nAddress line two" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "FAIL", "differences": [
+        { "code": "FIELD_CHANGED", "customerId": "000042", "sourceRow": 2, "field": "note", "expected": "Address line one\r\nAddress line two", "actual": "Address line one\nAddress line two" }
+      ] },
+      "patched": { "outcome": "FAIL", "differences": [
+        { "code": "FIELD_CHANGED", "customerId": "000042", "sourceRow": 2, "field": "note", "expected": "Address line one\r\nAddress line two", "actual": "Address line one\nAddress line two" }
+      ] }
+    },
+    {
+      "id": "nbsp-address",
+      "csv": "source_row,customer_id,name,note\n2,C-400,Jean\u00a0Dupont,10\u00a0rue du Port\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 2, "customer_id": "C-400", "name": "Jean\u00a0Dupont", "note": "10\u00a0rue du Port" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "FAIL", "differences": [
+        { "code": "FIELD_CHANGED", "customerId": "C-400", "sourceRow": 2, "field": "name", "expected": "Jean\u00a0Dupont", "actual": "Jean Dupont" },
+        { "code": "FIELD_CHANGED", "customerId": "C-400", "sourceRow": 2, "field": "note", "expected": "10\u00a0rue du Port", "actual": "10 rue du Port" }
+      ] },
+      "patched": { "outcome": "PASS", "differences": [] }
+    },
+    {
+      "id": "condition-note",
+      "csv": "source_row,customer_id,name,note\n2,C-500,Returns intake,Condition=New & boxed\n3,C-501,Support,Connection=mobile & retry\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 2, "customer_id": "C-500", "name": "Returns intake", "note": "Condition=New & boxed" },
+        { "sourceRow": 3, "customer_id": "C-501", "name": "Support", "note": "Connection=mobile & retry" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "FAIL", "beforeReloadDifferences": [], "differences": [
+        { "code": "FIELD_CHANGED", "customerId": "C-500", "sourceRow": 2, "field": "note", "expected": "Condition=New & boxed", "actual": "Condition=New &amp; boxed" },
+        { "code": "FIELD_CHANGED", "customerId": "C-501", "sourceRow": 3, "field": "note", "expected": "Connection=mobile & retry", "actual": "Connection=mobile &amp; retry" }
+      ] },
+      "patched": { "outcome": "PASS", "beforeReloadDifferences": [], "differences": [] }
+    },
+    {
+      "id": "literal-html",
+      "csv": "source_row,customer_id,name,note\n2,C-600,A & B <Partners>,  preserve spaces  \n3,C-601,Documentation,<b>literal</b> &amp; plain\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 2, "customer_id": "C-600", "name": "A & B <Partners>", "note": "  preserve spaces  " },
+        { "sourceRow": 3, "customer_id": "C-601", "name": "Documentation", "note": "<b>literal</b> &amp; plain" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "PASS", "differences": [] },
+      "patched": { "outcome": "PASS", "differences": [] }
+    },
+    {
+      "id": "bom-trailing",
+      "csv": "\ufeffsource_row,customer_id,name,note\r\n4,0010,Last name,\r\n2,0009,First name,\r\n3,9007199254740993,Middle name,\r\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 4, "customer_id": "0010", "name": "Last name", "note": "" },
+        { "sourceRow": 2, "customer_id": "0009", "name": "First name", "note": "" },
+        { "sourceRow": 3, "customer_id": "9007199254740993", "name": "Middle name", "note": "" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "PASS", "differences": [] },
+      "patched": { "outcome": "PASS", "differences": [] }
+    },
+    {
+      "id": "combined-contact",
+      "csv": "source_row,customer_id,name,note\n2,C-800,Jean\u00a0Dupont,Condition=New & boxed; deliver to 10\u00a0rue du Port\n",
+      "expected": { "schemaVersion": 1, "accepted": [
+        { "sourceRow": 2, "customer_id": "C-800", "name": "Jean\u00a0Dupont", "note": "Condition=New & boxed; deliver to 10\u00a0rue du Port" }
+      ], "rejected": [] },
+      "upstream": { "outcome": "FAIL", "differences": [
+        { "code": "FIELD_CHANGED", "customerId": "C-800", "sourceRow": 2, "field": "name", "expected": "Jean\u00a0Dupont", "actual": "Jean Dupont" },
+        { "code": "FIELD_CHANGED", "customerId": "C-800", "sourceRow": 2, "field": "note", "expected": "Condition=New & boxed; deliver to 10\u00a0rue du Port", "actual": "Condition=New &amp; boxed; deliver to 10 rue du Port" }
+      ] },
+      "patched": { "outcome": "PASS", "differences": [] }
+    }
+  ]
+}

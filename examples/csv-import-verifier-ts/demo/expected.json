@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "accepted": [
+    { "sourceRow": 2, "customer_id": "0017", "name": "Returns intake", "note": "Condition=New & boxed" },
+    { "sourceRow": 3, "customer_id": "C-400", "name": "Jean Dupont", "note": "10 rue du Port" }
+  ],
+  "rejected": []
+}

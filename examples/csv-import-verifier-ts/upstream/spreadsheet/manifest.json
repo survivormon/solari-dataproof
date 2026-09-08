@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/supunlakmal/spreadsheet",
+  "commit": "fdad288df3de36fc6c235c6bc24d94fa8a30bf5d",
+  "license": "MIT",
+  "retrievedAt": "2026-09-07",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 1079,
+      "sha256": "06c3c3b7316e4dd091888215dda40ff3bdd98cca765a400904515f0d551a15b8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 32090,
+      "sha256": "6e1c5afb77f1bf0863a3f6d58859de7d244fce8fb680ae8573889357aec05dc9"
+    },
+    {
+      "path": "index.html",
+      "bytes": 28211,
+      "sha256": "ae4aa42aec840d857946ed3e871772ed823c7f177460a807d2d23f015550fa08"
+    },
+    {
+      "path": "lib/lz-string.min.js",
+      "bytes": 4814,
+      "sha256": "95f4d1cbf099f57161b664bc048426ec3df92637801a4c79116e83315aa787e7"
+    },
+    {
+      "path": "lib/peerjs.min.js",
+      "bytes": 94430,
+      "sha256": "29e6ad48ce4552a35a348dc55ee7a5657db89cf9de229dbc56292d1be35867e8"
+    },
+    {
+      "path": "lib/qrcode.min.js",
+      "bytes": 19927,
+      "sha256": "c541ef06327885a8415bca8df6071e14189b4855336def4f36db54bde8484f36"
+    },
+    {
+      "path": "modules/app_launcher.js",
+      "bytes": 1838,
+      "sha256": "271dcb27dedbeae78f144cf29a75c0b64c940a1631a913b9d9e2107388e265d4"
+    },
+    {
+      "path": "modules/cellFormattingManager.js",
+      "bytes": 7410,
+      "sha256": "cae553969541396a5e34cfd1d87f8b987cf51b73d13d39f62aaa391af6263891"
+    },
+    {
+      "path": "modules/commandPaletteManager.js",
+      "bytes": 23119,
+      "sha256": "9442715bde2a3b0890de9090db26bf8ebd539b962752c80c77120aa4f8b6af53"
+    },
+    {
+      "path": "modules/constants.js",
+      "bytes": 3073,
+      "sha256": "65c880188ffa046efa42cbd453b14686110df6f02ae46ac233936870edcfee4c"
+    },
+    {
+      "path": "modules/csvManager.js",
+      "bytes": 6000,
+      "sha256": "badcc05497c6a4020523e2e38e7b841b8d35fc192a2c97994da30cbe860a9298"
+    },
+    {
+      "path": "modules/dependencyTracer.js",
+      "bytes": 11665,
+      "sha256": "4a4f2f0b88059a8c35ead730a3b018183bf8a767656426dc64366ab94678f28b"
+    },
+    {
+      "path": "modules/encryption.js",
+      "bytes": 4038,
+      "sha256": "420cbcf90054bad0ba1ed6b8380d7dcf71644ea8e082d3a2ad53bd3ba845d8f9"
+    },
+    {
+      "path": "modules/excelManager.js",
+      "bytes": 7069,
+      "sha256": "605ea8eab84ebec45d8b50ee2b187a4d5bb4c0b92026fdb605355f6c1bc220ca"
+    },
+    {
+      "path": "modules/formulaManager.js",
+      "bytes": 22023,
+      "sha256": "20a490e9c8306100ad1a26a15c3b030b6e7f4f0c8a69af85b1cd0d7439bf513e"
+    },
+    {
+      "path": "modules/hashToolManager.js",
+      "bytes": 9298,
+      "sha256": "49e2e1845668ba770d6397692559125b88d8ccc79ec17e6dd0573ba04923594a"
+    },
+    {
+      "path": "modules/jsonManager.js",
+      "bytes": 3243,
+      "sha256": "a82f0b144d595af39545f1b7c4f91cb0339d9234cca3780944cd25907cddc4f4"
+    },
+    {
+      "path": "modules/p2pManager.js",
+      "bytes": 8267,
+      "sha256": "e952e45c6e6d9ca943936f882077760c20cc13a172c4d7a54eb6a5223bc977b9"
+    },
+    {
+      "path": "modules/passwordManager.js",
+      "bytes": 9782,
+      "sha256": "c56a6db0e0645f50ff6e1c901d146835bbb2ec3b6912f5f8582a7e996e228570"
+    },
+    {
+      "path": "modules/presentationManager.js",
+      "bytes": 8180,
+      "sha256": "0f70ad787e421647906f167182cf38e024522aa210d04614bfce64a4c588168e"
+    },
+    {
+      "path": "modules/qrCodeManager.js",
+      "bytes": 4483,
+      "sha256": "74951283cb967d8258432d1fdae82bb8b967728516f2a7dafa66bd88dd836a3e"
+    },
+    {
+      "path": "modules/rowColManager.js",
+      "bytes": 40690,
+      "sha256": "a555f28bc9e92aca25855dbbd354d62b3a5059020306ab6a6b4c3f45c1876d8e"
+    },
+    {
+      "path": "modules/security.js",
+      "bytes": 4691,
+      "sha256": "aad2eb9a9592bbe60e884bb03823ffc8a4b3f96b3bae097d8187746e011237db"
+    },
+    {
+      "path": "modules/selectionStatusManager.js",
+      "bytes": 3890,
+      "sha256": "9bff9fd1b5c441df3549f72d47d2f4bee84d13f0866b1baf31742a5f840ca23c"
+    },
+    {
+      "path": "modules/templateManager.js",
+      "bytes": 6184,
+      "sha256": "7fb938a902b55f4c73acd483733f4f202ac44648d24e894a31c15bea1395c9a8"
+    },
+    {
+      "path": "modules/themeManager.js",
+      "bytes": 2483,
+      "sha256": "0f522608ac6df478062350ded5204d3fc8b835ab5521096e71103fa359405d68"
+    },
+    {
+      "path": "modules/toastManager.js",
+      "bytes": 2595,
+      "sha256": "e4ef931be33ec74d8503ec0698d95d1c31a79c4c24192f7201c8dfe73f65e4d6"
+    },
+    {
+      "path": "modules/uiModeManager.js",
+      "bytes": 5388,
+      "sha256": "29c9dcaa44113828528f451ddfa302ca69feabacb0948ffd05844c9581182d63"
+    },
+    {
+      "path": "modules/urlManager.js",
+      "bytes": 25399,
+      "sha256": "050db29d30a5717d552d454d2869dd40015706ab44618e1387514df096e3b901"
+    },
+    {
+      "path": "modules/visualFunctions.js",
+      "bytes": 12412,
+      "sha256": "207085a047140fd84954cd60cb6fc2f658972368f33239347ecb5693ea3852c0"
+    },
+    {
+      "path": "script.js",
+      "bytes": 68595,
+      "sha256": "c0359135be6dd7d61ffba26282f0e8b3d658f2e041c4813f6dc95ea48b4ef2aa"
+    },
+    {
+      "path": "styles.css",
+      "bytes": 71666,
+      "sha256": "b36adc1c8cc80ee7dac9247f9408362c4616765744945682f1b2a35c3405c7bd"
+    },
+    {
+      "path": "templates.json",
+      "bytes": 36330,
+      "sha256": "97536b8d864b276d63f091551da7514daee293701950184c7fdefc700492c2d4"
+    }
+  ]
+}
