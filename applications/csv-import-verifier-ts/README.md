@@ -1,4 +1,4 @@
-# CSV import verifier
+# Solari DataProof
 
 Upload customer data into a real spreadsheet, export it, reload the page, and
 compare both exports with independently written expectations. Solari
@@ -11,7 +11,7 @@ CSV downloads. Both exports must match for PASS.
 Requires Node 22+ and a Solari API key in your shell environment.
 
 ```sh
-cd examples/csv-import-verifier-ts
+cd applications/csv-import-verifier-ts
 npm install
 npm run spreadsheet:install
 export SOLARI_API_KEY=your_key
