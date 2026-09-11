@@ -194,8 +194,7 @@ export async function runVerification(
       signal.throwIfAborted()
       return compare(expected, parseExport(JSON.parse(decodeUtf8(bytes))))
     }
-    if (observed.beforeReloadPath)
-      report.beforeReloadComparison = await compareExport(observed.beforeReloadPath)
+    report.beforeReloadComparison = await compareExport(observed.beforeReloadPath)
     report.comparison = await compareExport(observed.exportPath)
     report.outcome = differenceCount(report) ? "FAIL" : "PASS"
   } catch (error) {

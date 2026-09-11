@@ -65,7 +65,7 @@ function fakeDependencies(failAt = "", closeFailures: string[] = []) {
           ? "not json"
           : await readFile(join(packageRoot, "test", "support", "fixtures", "expected.json")),
       )
-      return { exportPath, successMessage: "Import successful" }
+      return { exportPath, beforeReloadPath: exportPath, successMessage: "Import successful" }
     },
   }
   return { dependencies, closed }
@@ -108,13 +108,14 @@ test("corruption before reload cannot be hidden by a later matching export", asy
 test("a missing or malformed pre-reload export prevents a completed verdict", async () => {
   const root = await mkdtemp(join(tmpdir(), "csv-checkpoint-error-"))
   try {
-    for (const malformed of [false, true]) {
+    for (const fault of ["omitted", "missing", "malformed"]) {
       const fake = fakeDependencies()
       const adapter = fake.dependencies.adapter
       fake.dependencies.adapter = async (page, input) => {
         const observed = await adapter(page, input)
         const beforeReloadPath = join(input.outputDirectory, "before-reload.json")
-        if (malformed) await writeFile(beforeReloadPath, "not JSON")
+        if (fault === "omitted") return { ...observed, beforeReloadPath: undefined! }
+        if (fault === "malformed") await writeFile(beforeReloadPath, "not JSON")
         return { ...observed, beforeReloadPath }
       }
       const { report } = await runWithTestInput({ outputRoot: root }, fake.dependencies)
@@ -296,7 +297,7 @@ test("validated user buffers replace frozen demo paths and retain an independent
           rejected: [],
         }),
       )
-      return { exportPath, successMessage: "Import successful" }
+      return { exportPath, beforeReloadPath: exportPath, successMessage: "Import successful" }
     }
     const { report, directory } = await runWithTestInput(
       {
@@ -470,7 +471,7 @@ test("invalid UTF-8 cannot become matching JSON evidence or enter input artifact
       fake.dependencies.adapter = async (_, input) => {
         const exportPath = join(input.outputDirectory, "observed.json")
         await writeFile(exportPath, malformed)
-        return { exportPath, successMessage: "Synthetic encoding test" }
+        return { exportPath, beforeReloadPath: exportPath, successMessage: "Synthetic encoding test" }
       }
       const { report, directory } = await runWithTestInput(
         {

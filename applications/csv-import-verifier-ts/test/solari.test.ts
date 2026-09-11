@@ -125,7 +125,7 @@ async function runFake(
     input.validateArtifact?.(bytes)
     const exportPath = join(input.outputDirectory, "observed.json")
     await writeFile(exportPath, bytes)
-    return { exportPath, successMessage: "Import successful" }
+    return { exportPath, beforeReloadPath: exportPath, successMessage: "Import successful" }
   }
   try {
     return await runWithTestInput({ outputRoot: root }, { ...deps, adapter })

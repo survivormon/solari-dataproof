@@ -126,13 +126,6 @@ export async function spreadsheetFiles(
   return { files, sha256: hash.digest("hex") }
 }
 
-export async function startSpreadsheet(
-  cache = spreadsheetCache,
-  variant: SpreadsheetVariant = "upstream",
-): Promise<FixtureHandle> {
-  return serveSpreadsheet((await spreadsheetFiles(cache, variant)).files)
-}
-
 export async function serveSpreadsheet(
   files: Map<string, Buffer>,
   options: { publicOrigin?: string; host?: string; port?: number } = {},
@@ -149,7 +142,13 @@ export async function serveSpreadsheet(
       response.writeHead(405).end()
       return
     }
-    const pathname = new URL(request.url ?? "/", origin).pathname
+    let pathname: string
+    try {
+      pathname = new URL(request.url ?? "/", origin).pathname
+    } catch {
+      response.writeHead(400).end()
+      return
+    }
     if (pathname === "/health") {
       response
         .writeHead(200, { "Content-Type": "application/json" })

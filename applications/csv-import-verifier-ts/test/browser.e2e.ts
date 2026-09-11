@@ -4,7 +4,7 @@ import { join } from "node:path"
 import test from "node:test"
 import { localBrowser, packageRoot, runVerification } from "../src/runner.js"
 import { spreadsheetAdapter } from "../src/spreadsheet-adapter.js"
-import { startSpreadsheet } from "../src/spreadsheet-source.js"
+import { serveSpreadsheet, spreadsheetFiles } from "../src/spreadsheet-source.js"
 
 for (const failure of ["export", "disconnect", "upload"] as const) {
   test(
@@ -25,7 +25,7 @@ for (const failure of ["export", "disconnect", "upload"] as const) {
         },
         {
           fixture: async () => {
-            const server = await startSpreadsheet()
+            const server = await serveSpreadsheet((await spreadsheetFiles()).files)
             origin = server.url
             return server
           },

@@ -16,7 +16,7 @@ export interface AdapterInput {
 }
 export interface AdapterResult {
   exportPath: string
-  beforeReloadPath?: string
+  beforeReloadPath: string
   successMessage: string
 }
 export type ImportAdapter = (page: Page, input: AdapterInput) => Promise<AdapterResult>

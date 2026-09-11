@@ -40,6 +40,11 @@ npm run local
 npm run local -- --variant patched
 ```
 
+With the bundled data, the upstream run exits `1` with two differences before
+reload and three after it. The patched run exits `0` with no differences.
+Open the printed `report.html` paths to compare the exact changed values and
+downloaded CSVs. The patches are in `src/spreadsheet-source.ts`.
+
 Use the [demo CSV](demo/customers.csv) and [expected JSON](demo/expected.json) as
 templates, then pass `--input your.csv --expected your.json` to either command.
 Write expectations independently of the app's export. The fixed schema

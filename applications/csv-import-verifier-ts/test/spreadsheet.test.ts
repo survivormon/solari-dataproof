@@ -9,7 +9,8 @@ import { compare } from "../src/compare.js"
 import { parseExport } from "../src/model.js"
 import { packageRoot } from "../src/runner.js"
 import { normalizeSpreadsheetCSV, spreadsheetAdapter } from "../src/spreadsheet-adapter.js"
-import { startSpreadsheet } from "../src/spreadsheet-source.js"
+import { request } from "node:http"
+import { serveSpreadsheet, spreadsheetFiles } from "../src/spreadsheet-source.js"
 import { removeTestDirectory } from "./temp.js"
 
 test("spreadsheet: normalization preserves every regression case's exact text", async () => {
@@ -56,13 +57,32 @@ test("spreadsheet: valid replacement characters survive but malformed UTF-8 neve
 test("spreadsheet: missing or changed upstream source stops before serving", async () => {
   const directory = await mkdtemp(join(tmpdir(), "csv-spreadsheet-source-"))
   try {
-    await assert.rejects(startSpreadsheet(directory), { code: "SPREADSHEET_NOT_INSTALLED" })
+    await assert.rejects(spreadsheetFiles(directory), { code: "SPREADSHEET_NOT_INSTALLED" })
     // LICENSE is first in the pinned inventory; changed bytes must not be repaired silently.
     await writeFile(join(directory, "LICENSE"), "deliberately changed")
-    await assert.rejects(startSpreadsheet(directory), { code: "UPSTREAM_HASH_MISMATCH" })
+    await assert.rejects(spreadsheetFiles(directory), { code: "UPSTREAM_HASH_MISMATCH" })
     assert.equal(await readFile(join(directory, "LICENSE"), "utf8"), "deliberately changed")
   } finally {
     await removeTestDirectory(directory)
+  }
+})
+
+test("spreadsheet: malformed request URLs do not terminate the server", async () => {
+  const server = await serveSpreadsheet(new Map([["/index.html", Buffer.from("healthy")]]))
+  try {
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      const req = request(server.url, { path: "//[", timeout: 1_000 }, (response) => {
+        response.resume()
+        response.on("end", () => resolve(response.statusCode))
+      })
+      req.on("error", reject)
+      req.on("timeout", () => req.destroy(new Error("Request timed out")))
+      req.end()
+    })
+    assert.equal(status, 400)
+    assert.equal(await (await fetch(server.url)).text(), "healthy")
+  } finally {
+    await server.close()
   }
 })
 
