@@ -498,3 +498,231 @@ test("invalid UTF-8 cannot become matching JSON evidence or enter input artifact
     await removeTestDirectory(root)
   }
 })
+
+for (const stalledStage of ["context", "route", "page"] as const) {
+  test(
+    `a stalled local ${stalledStage} call is bounded and proceeds to owned cleanup`,
+    { timeout: 5_000 },
+    async (t) => {
+      const root = await mkdtemp(join(tmpdir(), "csv-runner-work-timeout-"))
+      try {
+        t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
+        const fake = fakeDependencies(), started = deferred()
+        const originalBrowser = fake.dependencies.browser
+        let adapterCalled = false
+        fake.dependencies.adapter = async () => {
+          adapterCalled = true
+          throw new Error("adapter must not run")
+        }
+        fake.dependencies.browser = async (options) => {
+          const browser = await originalBrowser(options) as Browser
+          const originalContext = browser.newContext.bind(browser)
+          browser.newContext = async () => {
+            if (stalledStage === "context") {
+              started.resolve()
+              return new Promise<never>(() => {})
+            }
+            const context = await originalContext()
+            if (stalledStage === "route") context.route = async () => {
+              started.resolve()
+              return new Promise<never>(() => {})
+            }
+            if (stalledStage === "page") context.newPage = async () => {
+              started.resolve()
+              return new Promise<never>(() => {})
+            }
+            return context
+          }
+          return browser
+        }
+        const running = runWithTestInput({ outputRoot: root }, fake.dependencies)
+        await started.promise
+        t.mock.timers.tick(10_001)
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        if (stalledStage === "context") t.mock.timers.tick(6_001)
+        const { report } = await running
+        assert.equal(report.outcome, "INFRA_ERROR")
+        assert.deepEqual(report.error, {
+          stage: stalledStage === "page" ? "page" : "context",
+          code: "DEADLINE_EXCEEDED",
+        })
+        assert.equal(report.comparison, null)
+        assert.equal(adapterCalled, false)
+        assert.deepEqual(fake.closed, stalledStage === "context"
+          ? ["browser", "fixture"]
+          : ["context", "browser", "fixture"])
+        if (stalledStage === "context")
+          assert.equal(report.cleanup[0]?.errorCode, "DEADLINE_EXCEEDED")
+      } finally {
+        t.mock.timers.reset()
+        await removeTestDirectory(root)
+      }
+    },
+  )
+}
+
+test("the local 120-second work deadline aborts a stalled adapter and cannot publish PASS", { timeout: 5_000 }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "csv-runner-adapter-deadline-"))
+  try {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
+    const fake = fakeDependencies(), started = deferred()
+    fake.dependencies.configureContext = async () => { t.mock.timers.tick(9_000) }
+    let adapterSignal: AbortSignal | undefined
+    fake.dependencies.adapter = async (_, input) => {
+      adapterSignal = input.signal
+      input.onStep("export")
+      started.resolve()
+      return new Promise<never>(() => {})
+    }
+    const running = runWithTestInput({ outputRoot: root }, fake.dependencies)
+    await started.promise
+    t.mock.timers.tick(111_001)
+    const { report, directory } = await running
+    assert.equal(report.outcome, "INFRA_ERROR")
+    assert.deepEqual(report.error, { stage: "export", code: "DEADLINE_EXCEEDED" })
+    assert.equal(report.comparison, null)
+    assert.equal(adapterSignal?.aborted, true)
+    assert.deepEqual(fake.closed, ["context", "browser", "fixture"])
+    assert.equal(JSON.parse(await readFile(join(directory, "report.json"), "utf8")).outcome, "INFRA_ERROR")
+  } finally {
+    t.mock.timers.reset()
+    await removeTestDirectory(root)
+  }
+})
+
+test("caller cancellation interrupts active local work and waits for owned cleanup", { timeout: 5_000 }, async () => {
+  const root = await mkdtemp(join(tmpdir(), "csv-runner-caller-abort-"))
+  try {
+    const fake = fakeDependencies(), started = deferred(), controller = new AbortController()
+    let adapterSignal: AbortSignal | undefined
+    fake.dependencies.adapter = async (_, input) => {
+      adapterSignal = input.signal
+      input.onStep("export")
+      started.resolve()
+      return new Promise<never>(() => {})
+    }
+    const running = runWithTestInput({ outputRoot: root, signal: controller.signal }, fake.dependencies)
+    await started.promise
+    controller.abort()
+    const { report } = await running
+    assert.equal(report.outcome, "INFRA_ERROR")
+    assert.deepEqual(report.error, { stage: "export", code: "INTERRUPTED" })
+    assert.equal(report.comparison, null)
+    assert.equal(adapterSignal?.aborted, true)
+    assert.deepEqual(fake.closed, ["context", "browser", "fixture"])
+    assert.ok(report.cleanup.every((record) => record.status === "CLOSED"))
+  } finally {
+    await removeTestDirectory(root)
+  }
+})
+
+test("a cancelled caller cannot begin fixture or browser acquisition", async () => {
+  const root = await mkdtemp(join(tmpdir(), "csv-runner-pre-abort-"))
+  try {
+    const fake = fakeDependencies(), controller = new AbortController()
+    controller.abort(new RunError("INTERRUPTED"))
+    const { report } = await runWithTestInput({ outputRoot: root, signal: controller.signal }, fake.dependencies)
+    assert.equal(report.outcome, "INFRA_ERROR")
+    assert.deepEqual(report.error, { stage: "preflight", code: "INTERRUPTED" })
+    assert.deepEqual(report.steps, ["preflight"])
+    assert.deepEqual(fake.closed, [])
+    assert.deepEqual(report.cleanup, [])
+  } finally {
+    await removeTestDirectory(root)
+  }
+})
+
+test("a browser acquired after cleanup expires is still closed without changing the failed report", { timeout: 5_000 }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "csv-runner-late-browser-"))
+  try {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
+    const fake = fakeDependencies(), started = deferred(), acquired = deferred(), closed = deferred()
+    fake.dependencies.browser = async () => {
+      started.resolve()
+      await acquired.promise
+      return {
+        close: async () => { fake.closed.push("late browser"); closed.resolve() },
+      } as unknown as Browser
+    }
+    const running = runWithTestInput({ outputRoot: root }, fake.dependencies)
+    await started.promise
+    t.mock.timers.tick(10_001)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    t.mock.timers.tick(35_001)
+    const { report, directory } = await running
+    assert.equal(report.outcome, "INFRA_ERROR")
+    assert.deepEqual(report.error, { stage: "browser", code: "DEADLINE_EXCEEDED" })
+    assert.equal(report.cleanup[0]?.resource, "browser")
+    assert.equal(report.cleanup[0]?.status, "FAILED")
+    assert.deepEqual(fake.closed, ["fixture"])
+    const saved = await readFile(join(directory, "report.json"), "utf8")
+    acquired.resolve()
+    await closed.promise
+    assert.deepEqual(fake.closed, ["fixture", "late browser"])
+    assert.equal(await readFile(join(directory, "report.json"), "utf8"), saved)
+    assert.equal(report.cleanup[0]?.status, "FAILED")
+  } finally {
+    t.mock.timers.reset()
+    await removeTestDirectory(root)
+  }
+})
+
+test("caller cancellation during cleanup cannot publish PASS", { timeout: 5_000 }, async () => {
+  const root = await mkdtemp(join(tmpdir(), "csv-runner-cleanup-abort-"))
+  try {
+    const fake = fakeDependencies(), started = deferred(), closed = deferred(), controller = new AbortController()
+    const originalBrowser = fake.dependencies.browser
+    fake.dependencies.browser = async (options) => {
+      const browser = await originalBrowser(options)
+      browser.close = async () => {
+        started.resolve()
+        await closed.promise
+        fake.closed.push("browser")
+      }
+      return browser
+    }
+    const running = runWithTestInput({ outputRoot: root, signal: controller.signal }, fake.dependencies)
+    await started.promise
+    controller.abort()
+    closed.resolve()
+    const { report } = await running
+    assert.equal(report.outcome, "INFRA_ERROR")
+    assert.deepEqual(report.error, { stage: "cleanup", code: "INTERRUPTED" })
+    assert.deepEqual(fake.closed, ["context", "browser", "fixture"])
+    assert.ok(report.cleanup.every((record) => record.status === "CLOSED"))
+  } finally {
+    await removeTestDirectory(root)
+  }
+})
+
+test("an unusable output location fails with an actionable code before resource acquisition", async () => {
+  const root = await mkdtemp(join(tmpdir(), "csv-runner-output-location-"))
+  try {
+    const fake = fakeDependencies(), outputFile = join(root, "existing-file")
+    await writeFile(outputFile, "reserved")
+    await assert.rejects(runWithTestInput({ outputRoot: outputFile }, fake.dependencies), {
+      code: "OUTPUT_DIRECTORY_FAILED",
+    })
+    assert.deepEqual(fake.closed, [])
+  } finally {
+    await removeTestDirectory(root)
+  }
+})
+
+test("a report write failure is actionable and occurs after owned cleanup", async () => {
+  const root = await mkdtemp(join(tmpdir(), "csv-runner-report-write-"))
+  try {
+    const fake = fakeDependencies(), adapter = fake.dependencies.adapter
+    fake.dependencies.adapter = async (page, input) => {
+      const observed = await adapter(page, input)
+      await writeFile(join(input.outputDirectory, "report.json"), "reserved")
+      return observed
+    }
+    await assert.rejects(runWithTestInput({ outputRoot: root }, fake.dependencies), {
+      code: "REPORT_WRITE_FAILED",
+    })
+    assert.deepEqual(fake.closed, ["context", "browser", "fixture"])
+  } finally {
+    await removeTestDirectory(root)
+  }
+})

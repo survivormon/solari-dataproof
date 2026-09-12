@@ -235,9 +235,14 @@ test("input diagnostics identify file roles without exposing paths or malformed 
     await writeFile(input.expected, '{"private_note":"NEVER_PRINT_THIS",unfinished')
     assert.equal(await spreadsheetMain(["--input", input.csv, "--expected", input.expected]), 3)
     assert.deepEqual(
-      errors.mock.calls.map((call) => call.arguments),
+      errors.mock.calls.map((call) => [String(call.arguments[0]).split(":")[0]]),
       [...cases.map((item) => [item.code]), ["INVALID_EXPECTED_JSON"]],
     )
+    const output = errors.mock.calls.map((call) => call.arguments.join(" ")).join("\n")
+    assert.doesNotMatch(output, /private-missing|NEVER_PRINT_THIS/)
+    assert.ok(!output.includes(root))
+    assert.match(output, /--input/)
+    assert.match(output, /--expected/)
     assert.deepEqual((await readdir(root)).sort(), ["customers.csv", "expected.json"])
   } finally {
     await removeTestDirectory(root)

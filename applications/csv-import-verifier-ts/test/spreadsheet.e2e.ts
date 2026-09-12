@@ -1,92 +1,41 @@
 import assert from "node:assert/strict"
 import { access, mkdir, readFile, writeFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import test from "node:test"
 import { packageRoot } from "../src/runner.js"
 import { normalizeSpreadsheetCSV } from "../src/spreadsheet-adapter.js"
 import { runSpreadsheet } from "../src/spreadsheet.js"
-import { spreadsheetCommit } from "../src/spreadsheet-source.js"
+import { runDemo } from "../src/demo.js"
 
 test(
-  "README demo detects the upstream defects and passes with the two patches",
+  "README demo verifies both variants and writes a linked comparison report",
   { timeout: 90_000 },
-  async () => {
-    const input = {
-      csv: join(packageRoot, "demo", "customers.csv"),
-      expected: join(packageRoot, "demo", "expected.json"),
-    }
-    const expectedDifferences = [
-      {
-        code: "FIELD_CHANGED",
-        customerId: "0017",
-        sourceRow: 2,
-        field: "note",
-        expected: "Condition=New & boxed",
-        actual: "Condition=New &amp; boxed",
-      },
-      {
-        code: "FIELD_CHANGED",
-        customerId: "C-400",
-        sourceRow: 3,
-        field: "name",
-        expected: "Jean\u00a0Dupont",
-        actual: "Jean Dupont",
-      },
-      {
-        code: "FIELD_CHANGED",
-        customerId: "C-400",
-        sourceRow: 3,
-        field: "note",
-        expected: "10\u00a0rue du Port",
-        actual: "10 rue du Port",
-      },
-    ]
-    for (const variant of ["upstream", "patched"] as const) {
-      const { report, directory } = await runSpreadsheet({
-        input,
-        variant,
-        outputRoot: join(
-          packageRoot,
-          "output",
-          "demo-tests",
-          "nested-checkout-".repeat(8),
-          "nested-checkout-".repeat(8),
-        ),
-      })
+  async (t) => {
+    const { summary, directory: demoDirectory } = await runDemo({
+      signal: t.signal,
+      outputRoot: join(packageRoot, "output", "demo-tests", "nested-checkout-".repeat(8), "nested-checkout-".repeat(8)),
+    })
+    console.log(`README demo: ${demoDirectory}`)
+    assert.equal(summary.outcome, "VERIFIED", JSON.stringify(summary))
+    assert.deepEqual(summary.cases.map((item) => item.variant), ["upstream", "patched"])
+    const index = await readFile(join(demoDirectory, "index.html"), "utf8")
+    for (const item of summary.cases) {
+      const directory = dirname(join(demoDirectory, item.reportPath))
       assert.ok(join(directory, "input.csv").length > 260)
-      assert.equal(report.outcome, variant === "upstream" ? "FAIL" : "PASS", JSON.stringify(report))
-      assert.equal(report.error, null)
-      assert.equal(
-        report.beforeReloadComparison?.differences.length,
-        variant === "upstream" ? 2 : 0,
-      )
-      assert.deepEqual(
-        report.comparison?.differences,
-        variant === "upstream" ? expectedDifferences : [],
-      )
-      assert.ok(report.cleanup.every((item) => item.status === "CLOSED"))
+      assert.ok(index.includes(`href="${item.reportPath}"`))
       const html = await readFile(join(directory, "report.html"), "utf8")
-      if (variant === "upstream") assert.ok(html.includes("Jean\\u00a0Dupont"))
+      if (item.variant === "upstream") assert.ok(html.includes("Jean\\u00a0Dupont"))
       assert.ok(!/<script\b/i.test(html))
-      for (const name of [
-        "before-reload.csv",
-        "before-reload.json",
-        "observed.csv",
-        "observed.json",
-        "import-success.png",
-        "persisted.png",
-      ])
+      for (const name of ["before-reload.csv", "before-reload.json", "observed.csv", "observed.json", "import-success.png", "persisted.png"])
         await access(join(directory, name))
-      console.log(`README demo ${variant}: ${directory}`)
     }
   },
 )
-
 test(
   "independent spreadsheet: the 50-row supported boundary preserves every row and closes all resources",
   { timeout: 60_000 },
-  async () => {
+  async (t) => {
     const root = join(packageRoot, "output", "external", "tests", `boundary-50-${randomUUID()}`)
     await mkdir(root, { recursive: true })
     const accepted = Array.from({ length: 50 }, (_, index) => ({
@@ -111,6 +60,7 @@ test(
     })
     const { report, directory } = await runSpreadsheet({
       input,
+      signal: t.signal,
       variant: "patched",
       outputRoot: root,
     })

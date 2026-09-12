@@ -9,7 +9,7 @@ The bundled demo reproduces two defects in a pinned version of [Spreadsheet Live
 | Original app | 2 differences | 3 differences | FAIL |
 | With the two patches | 0 differences | 0 differences | PASS |
 
-[Download the recorded live evidence](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.1.0) for an install-free walkthrough. Extract the ZIP and open `dataproof-evidence/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
+[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.0) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
 
 ### Try it locally
 
@@ -21,11 +21,10 @@ cd solari-dataproof/applications/csv-import-verifier-ts
 npm ci
 npm run browser:install
 npm run spreadsheet:install
-npm run local
-npm run local -- --variant patched
+npm run demo
 ```
 
-The original app intentionally exits 1; run the patched command next. Open the printed HTML reports to inspect the exact changed values, screenshots, and downloaded CSVs.
+The command runs both cases and prints one comparison report. Exit 0 means the exact original defects were reproduced, the patched records were preserved, and both runs completed cleanup. Open the report to inspect changed values, screenshots, and downloaded CSVs. Add `--headed` to watch the browser; on Linux, use `npm run browser:install -- --with-deps` if system dependencies are missing.
 
 [Application and cloud usage](applications/csv-import-verifier-ts) · [Verification source](applications/csv-import-verifier-ts/src/compare.ts) · [Regression tests](applications/csv-import-verifier-ts/test) · [CI](https://github.com/survivormon/solari-dataproof/actions/workflows/dataproof.yml)
 

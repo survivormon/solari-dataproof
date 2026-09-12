@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx index.ts",
     "local": "tsx src/spreadsheet-cli.ts",
+    "demo": "tsx src/demo-cli.ts",
     "solari:recover": "tsx src/recovery-cli.ts",
     "spreadsheet:install": "tsx src/spreadsheet-install.ts",
     "check": "npm run typecheck && npm test && npm run test:e2e",

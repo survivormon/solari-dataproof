@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { createServer } from "node:http"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { dirname, extname, join } from "node:path"
+import { link, mkdir, open, readFile, unlink } from "node:fs/promises"
+import type { FileHandle } from "node:fs/promises"
+import { basename, dirname, extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { RunError } from "./model.js"
 import type { FixtureHandle } from "./runner.js"
@@ -60,6 +61,43 @@ async function manifest(): Promise<SourceManifest> {
   return value
 }
 
+export async function writeVerifiedSourceFile(
+  target: string,
+  expected: Pick<SourceFile, "bytes" | "sha256">,
+  body: ReadableStream<Uint8Array>,
+): Promise<void> {
+  const temporary = join(dirname(target), "." + basename(target) + "." + randomUUID() + ".tmp")
+  const reader = body.getReader()
+  let staged: FileHandle | undefined
+  try {
+    await mkdir(dirname(target), { recursive: true })
+    staged = await open(temporary, "wx")
+    const hash = createHash("sha256")
+    let size = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > expected.bytes) throw new RunError("UPSTREAM_HASH_MISMATCH")
+      hash.update(value)
+      await staged.writeFile(value)
+    }
+    if (size !== expected.bytes || hash.digest("hex") !== expected.sha256)
+      throw new RunError("UPSTREAM_HASH_MISMATCH")
+    await staged.sync()
+    await staged.close()
+    // A same-directory hard link publishes complete bytes atomically and never replaces a file.
+    await link(temporary, target)
+  } finally {
+    await reader.cancel().catch(() => {})
+    reader.releaseLock()
+    if (staged) {
+      await staged.close()
+      await unlink(temporary)
+    }
+  }
+}
+
 export async function installSpreadsheet(): Promise<{ downloaded: number; verified: number }> {
   let downloaded = 0
   const source = await manifest()
@@ -79,13 +117,10 @@ export async function installSpreadsheet(): Promise<{ downloaded: number; verifi
           signal: AbortSignal.timeout(15_000),
         },
       )
-      if (!response.ok) throw new RunError("UPSTREAM_DOWNLOAD_FAILED")
-      bytes = Buffer.from(await response.arrayBuffer())
-      if (bytes.length !== file.bytes || digest(bytes) !== file.sha256)
-        throw new RunError("UPSTREAM_HASH_MISMATCH")
-      await mkdir(dirname(target), { recursive: true })
-      await writeFile(target, bytes, { flag: "wx" })
+      if (!response.ok || !response.body) throw new RunError("UPSTREAM_DOWNLOAD_FAILED")
+      await writeVerifiedSourceFile(target, file, response.body)
       downloaded++
+      continue
     }
     // Never silently replace somebody's changed cache file.
     if (bytes.length !== file.bytes || digest(bytes) !== file.sha256)

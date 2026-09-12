@@ -6,7 +6,7 @@ reproduces two data-preservation bugs in Spreadsheet Live, then passes with two
 small source patches. An HTML report shows the exact changed values, screenshots,
 and exported CSVs. Both exports must match for PASS.
 
-[Download the recorded live evidence](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.1.0) for an install-free walkthrough. Extract the ZIP and open `dataproof-evidence/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
+[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.0) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
 
 ## Run the local demo
 
@@ -18,20 +18,27 @@ cd applications/csv-import-verifier-ts
 npm ci
 npm run spreadsheet:install
 npm run browser:install
-npm run local
+npm run demo
 ```
 
-The upstream run intentionally exits `1`: two differences before reload and three
-after it. Now run the patched version:
+One command runs the original and patched app, then prints a link to a single
+comparison report. Exit `0` means **Demo verified**: the exact original defects
+were reproduced, the patched exports matched at both checkpoints, the input and
+source hashes matched the frozen demo, and all resources closed. The original
+case retains its expected `FAIL` verdict inside the report.
 
-```sh
-npm run local -- --variant patched
-```
+Add `--headed` to watch the browser. On Linux, install browser system dependencies
+with `npm run browser:install -- --with-deps` if needed. The installed demo runs
+locally without external service calls.
 
-The patched run exits `0` with no differences. Open each printed `report.html`
-path to compare the changed values and downloaded CSVs. Add `--headed` to watch
-the local browser. On Linux, install browser system dependencies with
-`npm run browser:install -- --with-deps` if they are not already available.
+Each attempt keeps a new report under `output/demo/`. Cancellation, incomplete
+cleanup, or an unexpected result stops the sequence and retains completed
+evidence. The summary never treats partial execution as a verified demonstration.
+Local browser work has a 120-second deadline per case, followed by a separate
+48-second cleanup budget. Browser shutdown remains capped at 35 seconds.
+
+For individual runs, use `npm run local` (original, expected exit `1`) or
+`npm run local -- --variant patched` (expected exit `0`).
 
 The target is MIT-licensed [Spreadsheet Live](https://github.com/supunlakmal/spreadsheet),
 pinned to `fdad288df3de36fc6c235c6bc24d94fa8a30bf5d`. Installation fetches 33
@@ -66,8 +73,10 @@ Persistence means reloading the app's URL fragment; this does not test database
 durability, formulas, or arbitrary importers. Reports include your input data and
 are written under the ignored `output/` directory.
 
-Exit codes: `0` match, `1` mismatch, `2` invalid arguments, `3` execution or cleanup
-failure. Each run prints its report path.
+Individual-run exit codes: `0` match, `1` mismatch, `2` invalid arguments, `3` execution or cleanup
+failure. Each run prints its report path. The paired demo uses `0` for a verified
+demonstration, `1` for an unexpected result, `2` for invalid arguments, and `3`
+for incomplete execution.
 
 ## Run with Solari
 

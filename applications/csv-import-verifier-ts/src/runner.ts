@@ -18,6 +18,7 @@ export interface FixtureHandle {
 }
 export interface RunOptions {
   timeoutMs?: number
+  signal?: AbortSignal
   headed?: boolean
   outputRoot?: string
   input: { csv: Buffer; expected: Buffer }
@@ -87,7 +88,11 @@ export async function runVerification(
   const started = Date.now()
   const runId = randomUUID()
   const directory = join(options.outputRoot ?? join(packageRoot, "output", "playwright"), runId)
-  await mkdir(directory, { recursive: true })
+  try {
+    await mkdir(directory, { recursive: true })
+  } catch (error) {
+    throw error instanceof RunError ? error : new RunError("OUTPUT_DIRECTORY_FAILED")
+  }
   const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
   const report: Report = {
     schemaVersion: 2,
@@ -115,18 +120,87 @@ export async function runVerification(
     stage = name
     report.steps.push(name)
   }
-  const resources: Array<{ name: string; close(): Promise<void> }> = []
+  const resources: Array<{ name: string; rejected?: boolean; close(): Promise<void> }> = []
   const controller = new AbortController()
-  const signal = dependencies.signal
-    ? AbortSignal.any([controller.signal, dependencies.signal])
-    : controller.signal
+  const timeoutMs = options.timeoutMs ?? 10_000
+  const localWork = dependencies.guard
+    ? undefined
+    : new Budget({
+        workMs: 120_000,
+        totalMs: 120_000,
+        operationMs: timeoutMs,
+        cleanupCallMs: 6_000,
+      })
+  const signal = AbortSignal.any([
+    controller.signal,
+    ...[options.signal, dependencies.signal, localWork?.work.signal].filter(
+      (value): value is AbortSignal => value !== undefined,
+    ),
+  ])
+  const checkActive = () => {
+    if (signal.aborted)
+      throw signal.reason instanceof RunError
+        ? signal.reason
+        : new RunError(options.signal?.aborted ? "INTERRUPTED" : "DEADLINE_EXCEEDED")
+  }
   let browser: Browser | undefined
   let page: Page | undefined
-  const timeoutMs = options.timeoutMs ?? 10_000
-  const guard = <T>(operation: () => Promise<T>, maximumMs?: number): Promise<T> =>
-    dependencies.guard ? dependencies.guard(operation, maximumMs) : operation()
+  const guard = async <T>(operation: () => Promise<T>, maximumMs?: number): Promise<T> => {
+    checkActive()
+    let onAbort: (() => void) | undefined
+    try {
+      const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => {
+          try {
+            checkActive()
+          } catch (error) {
+            reject(error)
+          }
+        }
+        signal.addEventListener("abort", onAbort, { once: true })
+        if (signal.aborted) onAbort()
+      })
+      const value = await Promise.race([
+        dependencies.guard
+          ? dependencies.guard(operation, maximumMs)
+          : localWork!.run(operation, maximumMs),
+        aborted,
+      ])
+      checkActive()
+      return value
+    } finally {
+      if (onAbort) signal.removeEventListener("abort", onAbort)
+    }
+  }
+  const acquire = <T extends { close(): Promise<void> }>(
+    name: string,
+    operation: () => Promise<T>,
+    owned = true,
+    maximumMs?: number,
+  ): Promise<T> =>
+    guard(() => {
+      const pending = Promise.resolve().then(operation)
+      if (owned) {
+        // Register the acquisition before awaiting it. If it arrives after work times out,
+        // cleanup still closes the handle, even when its own wait has already expired.
+        const resource = {
+          name,
+          rejected: false,
+          close: async () => {
+            const value = await pending
+            await value.close()
+          },
+        }
+        resources.push(resource)
+        void pending.catch(() => {
+          resource.rejected = true
+        })
+      }
+      return pending
+    }, maximumMs)
   try {
     step("preflight")
+    checkActive()
     const { csv, expected: expectedBytes } = options.input
     if (csv.length > 256_000 || expectedBytes.length > 256_000)
       throw new RunError("INPUT_TOO_LARGE")
@@ -135,28 +209,33 @@ export async function runVerification(
     dependencies.validateArtifact?.(csv)
     dependencies.validateArtifact?.(expectedBytes)
     report.input = { file: "input.csv", sha256: sha256(csv), expectedSha256: sha256(expectedBytes) }
-    await writeFile(join(directory, "input.csv"), csv, { flag: "wx" })
-    await writeFile(join(directory, "expected.json"), expectedBytes, { flag: "wx" })
+    await guard(() => writeFile(join(directory, "input.csv"), csv, { flag: "wx", signal }))
+    await guard(() => writeFile(join(directory, "expected.json"), expectedBytes, { flag: "wx", signal }))
 
     step("fixture")
-    const fixture = await dependencies.fixture()
-    if (!dependencies.ownsResources)
-      resources.push({ name: "fixture server", close: () => fixture.close() })
+    const fixture = await acquire(
+      "fixture server",
+      () => dependencies.fixture(),
+      !dependencies.ownsResources,
+      dependencies.guard ? 120_000 : timeoutMs,
+    )
     step("browser")
-    browser = await dependencies.browser({ headed: options.headed ?? false, timeoutMs })
+    browser = await acquire(
+      "browser",
+      () => dependencies.browser({ headed: options.headed ?? false, timeoutMs }),
+      !dependencies.ownsResources,
+      dependencies.guard ? 120_000 : timeoutMs,
+    )
     const ownedBrowser = browser
-    if (!dependencies.ownsResources)
-      resources.push({ name: "browser", close: () => ownedBrowser.close() })
     report.environment.browser = browser.version()
     step("context")
-    const context = await guard<BrowserContext>(() =>
+    const context = await acquire<BrowserContext>("browser context", () =>
       ownedBrowser.newContext({
         acceptDownloads: true,
         viewport: { width: 1280, height: 960 },
         serviceWorkers: "block",
       }),
     )
-    resources.push({ name: "browser context", close: () => context.close() })
     context.setDefaultTimeout(timeoutMs)
     context.setDefaultNavigationTimeout(timeoutMs)
     // Page requests may reach only this run's owned fixture origin.
@@ -169,7 +248,13 @@ export async function runVerification(
     )
     if (dependencies.configureContext) await guard(() => dependencies.configureContext!(context))
     step("page")
-    page = await guard<Page>(() => context.newPage())
+    page = await guard<Page>(() =>
+      context.newPage().then((value) => {
+        // A page belongs to its context; close a late protocol response as well.
+        if (signal.aborted) void value.close().catch(() => {})
+        return value
+      }),
+    )
     const activePage = page
     const observed = await guard(
       () =>
@@ -180,22 +265,24 @@ export async function runVerification(
           timeoutMs,
           signal,
           onStep: (name) => {
-            signal.throwIfAborted()
+            checkActive()
             step(name)
           },
           validateArtifact: dependencies.validateArtifact,
         }),
       120_000,
     )
+    checkActive()
     report.successMessage = observed.successMessage
     step("compare")
     const compareExport = async (path: string) => {
       const bytes = await guard(() => readFile(path, { signal }))
-      signal.throwIfAborted()
+      checkActive()
       return compare(expected, parseExport(JSON.parse(decodeUtf8(bytes))))
     }
     report.beforeReloadComparison = await compareExport(observed.beforeReloadPath)
     report.comparison = await compareExport(observed.exportPath)
+    checkActive()
     report.outcome = differenceCount(report) ? "FAIL" : "PASS"
   } catch (error) {
     report.outcome = "INFRA_ERROR"
@@ -220,12 +307,17 @@ export async function runVerification(
                   : "EXECUTION_FAILED",
     }
     if (!dependencies.backend && page && !page.isClosed()) {
-      await page
-        .screenshot({ path: join(directory, "failure.png"), fullPage: true, timeout: 2_000 })
-        .catch(() => {})
+      const failurePage = page
+      await guard(
+        () => failurePage.screenshot({
+          path: join(directory, "failure.png"), fullPage: true, timeout: 2_000,
+        }),
+        2_000,
+      ).catch(() => {})
     }
   } finally {
     controller.abort(new RunError("RUN_ENDED"))
+    localWork?.dispose()
     dependencies.beginCleanup?.()
     const localCleanup = dependencies.cleanupCall
       ? undefined
@@ -239,6 +331,7 @@ export async function runVerification(
         })
     localCleanup?.beginCleanup()
     for (const resource of resources.reverse()) {
+      if (resource.rejected) continue
       const closeStarted = Date.now()
       try {
         await (dependencies.cleanupCall
@@ -257,6 +350,7 @@ export async function runVerification(
             : {}),
         })
       } catch (error) {
+        if (resource.rejected) continue
         report.cleanup.push({
           resource: resource.name,
           status: "FAILED",
@@ -284,10 +378,21 @@ export async function runVerification(
     }
     dependencies.dispose?.()
   }
+  if (options.signal?.aborted && report.outcome !== "INFRA_ERROR") {
+    report.outcome = "INFRA_ERROR"
+    report.error = {
+      stage: "cleanup",
+      code: options.signal.reason instanceof RunError ? options.signal.reason.code : "INTERRUPTED",
+    }
+  }
   report.durationMs = Date.now() - started
-  report.artifacts = (await readdir(directory)).sort()
-  if (dependencies.metadata) report.solari = dependencies.metadata()
-  dependencies.validateArtifact?.(JSON.stringify(report))
-  await writeReport(directory, report)
+  try {
+    report.artifacts = (await readdir(directory)).sort()
+    if (dependencies.metadata) report.solari = dependencies.metadata()
+    dependencies.validateArtifact?.(JSON.stringify(report))
+    await writeReport(directory, report)
+  } catch (error) {
+    throw error instanceof RunError ? error : new RunError("REPORT_WRITE_FAILED")
+  }
   return { report, directory }
 }

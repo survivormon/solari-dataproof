@@ -1,6 +1,7 @@
+import { describeError } from "./diagnostics.js"
 import { differenceCount } from "./report.js"
-import { fileURLToPath } from "node:url"
-import { resolve } from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import { join, resolve } from "node:path"
 import { RunError } from "./model.js"
 import { runSpreadsheet, type SpreadsheetOptions } from "./spreadsheet.js"
 
@@ -46,15 +47,23 @@ export async function spreadsheetMain(args: string[]): Promise<number> {
     console.log(spreadsheetUsage)
     return 0
   }
+  const controller = new AbortController()
+  const cancel = () => controller.abort(new RunError("INTERRUPTED"))
+  process.once("SIGINT", cancel)
+  process.once("SIGTERM", cancel)
   try {
-    const { report, directory } = await runSpreadsheet(options)
+    const { report, directory } = await runSpreadsheet({ ...options, signal: controller.signal })
     console.log(`${report.outcome}: ${differenceCount(report) ?? "unavailable"} differences`)
-    if (report.error) console.error(`${report.error.stage}: ${report.error.code}`)
-    console.log(`${directory}/report.html`)
+    if (report.error) console.error(`${report.error.stage}: ${report.error.code}. ${describeError(report.error.code, report.error.stage)}`)
+    console.log(pathToFileURL(join(directory, "report.html")).href)
     return report.outcome === "PASS" ? 0 : report.outcome === "FAIL" ? 1 : 3
   } catch (error) {
-    console.error(error instanceof RunError ? error.code : "SPREADSHEET_RUN_FAILED")
+    const code = error instanceof RunError ? error.code : "SPREADSHEET_RUN_FAILED"
+    console.error(`${code}: ${describeError(code, "preflight")}`)
     return 3
+  } finally {
+    process.removeListener("SIGINT", cancel)
+    process.removeListener("SIGTERM", cancel)
   }
 }
 

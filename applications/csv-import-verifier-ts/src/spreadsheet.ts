@@ -11,6 +11,7 @@ import {
 } from "./spreadsheet-source.js"
 
 export interface SpreadsheetOptions {
+  signal?: AbortSignal
   headed?: boolean
   outputRoot?: string
   input?: { csv: string; expected: string }
@@ -66,17 +67,20 @@ export async function runSpreadsheet(
   options: SpreadsheetOptions = {},
   backend?: Omit<Dependencies, "adapter">,
 ) {
+  options.signal?.throwIfAborted()
   const input = await readSpreadsheetInput(
     options.input ?? {
       csv: join(packageRoot, "demo", "customers.csv"),
       expected: join(packageRoot, "demo", "expected.json"),
     },
   )
+  options.signal?.throwIfAborted()
   const variant = options.variant ?? "upstream"
   const source = await spreadsheetFiles(undefined, variant)
   return runVerification(
     {
       headed: options.headed,
+      signal: options.signal,
       input,
       outputRoot: options.outputRoot ?? join(packageRoot, "output", "external"),
     },

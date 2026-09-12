@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { Comparison } from "./compare.js"
 import type { Outcome } from "./model.js"
+import { describeError } from "./diagnostics.js"
 
 export interface CleanupRecord {
   resource: string
@@ -73,6 +74,14 @@ export function differenceCount(report: Report): number | undefined {
 export function renderReport(report: Report): string {
   const e = escapeHtml
   const comparison = report.comparison
+  const hasCompletedComparison = Boolean(comparison || report.beforeReloadComparison)
+  const cleanupIncomplete = report.cleanup.some(
+    (item) => item.status === "FAILED" || item.status === "UNCONFIRMED",
+  )
+  const caseLabel = report.importer
+    ? report.importer.variant === "patched" ? "Patched case" : "Upstream case"
+    : "Controlled test"
+  const runTime = report.startedAt.replace(/T(\d{2}:\d{2}:\d{2})\.\d{3}Z$/, " $1 UTC")
   const value = (text: string | null) =>
     text === null ? "∅ absent" : e(JSON.stringify(text).replace(/\u00a0/g, "\\u00a0"))
   const rows = [
@@ -107,7 +116,7 @@ export function renderReport(report: Report): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
-<title>${e(report.outcome)} · CSV import verifier</title>
+<title>DataProof · ${e(caseLabel)} · ${e(report.outcome)}</title>
 <style>
  :root{color-scheme:light;font-family:system-ui,sans-serif;color:#18332f;background:#f3f5ef}*{box-sizing:border-box}
  body{margin:0}main{max-width:1160px;margin:auto;padding:40px 32px 64px}.top{display:flex;justify-content:space-between;gap:20px;align-items:center}
@@ -122,23 +131,30 @@ export function renderReport(report: Report): string {
  code{overflow-wrap:anywhere;font-size:12px}details{margin-top:18px}summary{cursor:pointer;color:#15563f;font-size:13px}footer{margin-top:26px;font-size:12px;line-height:1.7;color:#52665d}
  @media(max-width:640px){main{padding:24px 16px}.grid{grid-template-columns:1fr}.top{align-items:start;flex-direction:column}section{padding:16px}}
 </style></head><body><main>
-<div class="top"><span class="eyebrow">CSV import verifier / evidence report</span><span class="badge ${e(report.outcome)}">${e(report.outcome)} · ${report.environment.backend === "solari" ? (report.solari?.evidence === "offline-test" ? "SIMULATED SOLARI" : "SOLARI") : "LOCAL BROWSER"}</span></div>
-<h1>CSV round-trip verification</h1>
+<div class="top"><span class="eyebrow">DataProof / evidence report</span><span class="badge ${e(report.outcome)}">${e(report.outcome)} · ${report.environment.backend === "solari" ? (report.solari?.evidence === "offline-test" ? "SIMULATED SOLARI" : "SOLARI") : "LOCAL BROWSER"}</span></div>
+<h1>DataProof<br>${e(caseLabel)}</h1>
+<p class="muted">CSV round-trip verification · <time datetime="${e(report.startedAt)}">${e(runTime)}</time></p>
 <p class="intro">${
     report.outcome === "INFRA_ERROR"
-      ? "No import verdict is available. Resolve the execution failure before assessing data integrity."
-      : "A real browser uploaded the CSV, reloaded the page, and downloaded persisted records. Each record was checked against an independently authored expectation."
+      ? hasCompletedComparison
+        ? cleanupIncomplete
+          ? "Completed comparisons remain evidence, but resource cleanup failed or could not be confirmed. This run is incomplete and cannot be PASS."
+          : "Completed comparisons remain evidence, but verification did not finish. This run is incomplete and cannot be PASS."
+        : "The run is incomplete. No import verdict is available. Resolve the execution failure before assessing data integrity."
+      : "A browser uploaded the CSV and exported records before and after a page reload. Each record was checked against an independently authored expectation."
   }</p>
-<div class="grid"><div class="stat"><span class="eyebrow">Before reload</span><strong>${report.beforeReloadComparison?.differences.length ?? "Not measured"}</strong><small>Field differences</small></div>
-<div class="stat"><span class="eyebrow">After reload</span><strong>${comparison?.differences.length ?? "Not measured"}</strong><small>Field differences</small></div>
+<div class="grid"><div class="stat"><span class="eyebrow">Before reload</span><strong>${report.beforeReloadComparison?.differences.length ?? "Not measured"}</strong><small>Differences</small></div>
+<div class="stat"><span class="eyebrow">After reload</span><strong>${comparison?.differences.length ?? "Not measured"}</strong><small>Differences</small></div>
 <div class="stat"><span class="eyebrow">Records after reload</span><strong>${comparison ? `${comparison.actualAccepted} / ${comparison.expectedAccepted}` : "Unavailable"}</strong><small>Observed / expected</small></div></div>
 <section><h2>${report.error ? "Execution failure" : differenceCount(report) ? "What changed" : "Record checks"}</h2>
-${report.error ? `<p>Stage: <code>${e(report.error.stage)}</code> · <code>${e(report.error.code)}</code></p>` : ""}
+${report.error ? `<p>${e(describeError(report.error.code, report.error.stage))}</p><p class="muted">Stage: <code>${e(report.error.stage)}</code> · <code>${e(report.error.code)}</code></p>` : ""}
 ${
   rows
     ? `<p class="muted">Values are quoted. Escapes expose line endings (<code>\\r\\n</code>, <code>\\n</code>), tabs (<code>\\t</code>), and nonbreaking spaces (<code>\\u00a0</code>).</p><div class="scroll"><table><thead><tr><th>Checkpoint</th><th>Record</th><th>Difference</th><th>Expected</th><th>Observed</th></tr></thead><tbody>${rows}</tbody></table></div>`
-    : comparison
-      ? "<p>All fields and rejection records match the frozen expectation.</p>"
+    : hasCompletedComparison
+      ? report.outcome === "INFRA_ERROR"
+        ? "<p>Completed comparisons found no differences against the frozen expectation. The run remains incomplete.</p>"
+        : "<p>All records, fields, and rejection decisions in the completed comparisons match the frozen expectation.</p>"
       : "<p>No completed comparison.</p>"
 }
 </section>
@@ -147,7 +163,7 @@ ${!has("persisted.png") && has("failure.png") ? `<section><h2>Browser at failure
 <section><h2>Evidence &amp; cleanup</h2><div class="links">${links}</div>
 ${report.importer ? `<p>Importer: <strong>${e(report.importer.name)}</strong> · revision <code>${e(report.importer.revision)}</code> · ${e(report.importer.variant ?? "upstream")}</p><p>${e(report.importer.policy)}</p>${report.importer.sourceSha256 ? `<p>Served source SHA-256: <code>${e(report.importer.sourceSha256)}</code></p>` : ""}` : ""}
 <p>Importer message: <strong>${e(report.successMessage ?? "Not observed")}</strong></p>
-<div class="checks">${report.cleanup.map((item) => `<span>${e(item.resource)}: <strong>${e(item.status)}</strong>${item.elapsedMs !== undefined ? ` (${item.slow ? "slow closure; " : ""}${item.errorCode ? `${e(item.errorCode)}, ` : ""}${e(item.elapsedMs)} ms)` : ""}</span>`).join("") || "No resources acquired."}</div>
+<div class="checks">${report.cleanup.map((item) => `<span>${e(item.resource)}: <strong>${e(item.status)}</strong>${item.elapsedMs !== undefined ? ` (${item.slow ? "slow closure; " : ""}${item.errorCode ? `${e(item.errorCode)}, ` : ""}${e(item.elapsedMs)} ms)` : item.errorCode ? ` (${e(item.errorCode)})` : ""}</span>`).join("") || "No resources acquired."}</div>
 <details><summary>Run details</summary><p>Run <code>${e(report.runId)}</code> · ${e(report.startedAt)} · ${e(report.durationMs)} ms</p>
 <p>Node ${e(report.environment.node)} · Chromium ${e(report.environment.browser ?? "not launched")} · Playwright ${e(report.environment.playwright)}</p>
 ${report.solari?.browserClient ? `<p>Remote browser client: ${e(report.solari.browserClient)}</p>` : ""}
