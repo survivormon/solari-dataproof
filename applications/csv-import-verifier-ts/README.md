@@ -6,12 +6,12 @@ reproduces two data-preservation bugs in Spreadsheet Live, then passes with two
 small source patches. An HTML report shows the exact changed values, screenshots,
 and exported CSVs. Both exports must match for PASS.
 
-[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.1) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
+[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.2) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
 
 ## Run the local demo
 
 Use Ubuntu 24.04 with Node 22 or 24 and npm for the supported local path. Installation needs network access; installing browser system libraries may request sudo. No Solari account or API key is needed. Windows browser shutdown remains intermittently unreliable; use the recorded demo there.
-From the repository root of tag `dataproof-v0.2.1`:
+From the repository root of tag `dataproof-v0.2.2`:
 
 ```sh
 cd applications/csv-import-verifier-ts

@@ -97,7 +97,9 @@ export const spreadsheetAdapter: ImportAdapter = async (page, input) => {
   await page
     .locator("#import-csv-file")
     .setInputFiles({ name: "input.csv", mimeType: "text/csv", buffer })
-  const success = page.getByText("CSV imported successfully", { exact: true })
+  const success = page.locator("#toast-container .toast-success .toast-message", {
+    hasText: /^CSV imported successfully$/,
+  })
   await success.waitFor()
   const successMessage = (await success.textContent()) ?? ""
   await page.waitForURL((url) => url.href !== beforeUpload && url.hash.length > 1)

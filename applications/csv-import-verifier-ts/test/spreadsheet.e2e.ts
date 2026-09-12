@@ -8,6 +8,51 @@ import { normalizeSpreadsheetCSV } from "../src/spreadsheet-adapter.js"
 import { runSpreadsheet } from "../src/spreadsheet.js"
 import { runDemo } from "../src/demo.js"
 
+for (const variant of ["upstream", "patched"] as const) {
+  test(
+    `independent spreadsheet: ${variant} accepts cells matching the import success notification`,
+    { timeout: 60_000 },
+    async (t) => {
+      const root = join(packageRoot, "output", "external", "tests", `notification-${variant}-${randomUUID()}`)
+      await mkdir(root, { recursive: true })
+      const input = { csv: join(root, "input.csv"), expected: join(root, "expected.json") }
+      const expected = {
+        schemaVersion: 1,
+        accepted: [
+          { sourceRow: 2, customer_id: "0001", name: "Alice", note: "CSV imported successfully" },
+          { sourceRow: 3, customer_id: "0002", name: "CSV imported successfully", note: "Ordinary note" },
+        ],
+        rejected: [],
+      }
+      await writeFile(
+        input.csv,
+        "source_row,customer_id,name,note\r\n" +
+          "2,0001,Alice,CSV imported successfully\r\n" +
+          "3,0002,CSV imported successfully,Ordinary note\r\n",
+        { flag: "wx" },
+      )
+      await writeFile(input.expected, JSON.stringify(expected), { flag: "wx" })
+      const { report, directory } = await runSpreadsheet({ input, signal: t.signal, variant, outputRoot: root })
+      console.log(`Notification collision evidence (${variant}): ${directory}`)
+      assert.deepEqual(
+        report.cleanup.map(({ resource, status }) => ({ resource, status })),
+        [
+          { resource: "browser context", status: "CLOSED" },
+          { resource: "browser", status: "CLOSED" },
+          { resource: "fixture server", status: "CLOSED" },
+        ],
+      )
+      assert.equal(report.outcome, "PASS", JSON.stringify(report))
+      assert.equal(report.error, null)
+      assert.equal(report.successMessage, "CSV imported successfully")
+      assert.deepEqual(report.beforeReloadComparison?.differences, [])
+      assert.deepEqual(report.comparison?.differences, [])
+      for (const name of ["before-reload.csv", "observed.csv"])
+        assert.deepEqual(normalizeSpreadsheetCSV(await readFile(join(directory, name))), expected)
+    },
+  )
+}
+
 test(
   "README demo verifies both variants and writes a linked comparison report",
   { timeout: 90_000 },

@@ -9,14 +9,14 @@ The bundled demo reproduces two defects in a pinned version of [Spreadsheet Live
 | Original app | 2 differences | 3 differences | FAIL |
 | With the two patches | 0 differences | 0 differences | PASS |
 
-[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.1) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
+[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.2) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
 
 ### Try it locally
 
 Use Ubuntu 24.04 with Node 22 or 24, npm, and Git for the supported local path. Installation needs network access; the browser dependency step may request sudo to install system libraries. No Solari account is needed. Windows browser shutdown remains intermittently unreliable; use the recorded demo there.
 
 ```sh
-git clone --branch dataproof-v0.2.1 --depth 1 https://github.com/survivormon/solari-dataproof.git
+git clone --branch dataproof-v0.2.2 --depth 1 https://github.com/survivormon/solari-dataproof.git
 cd solari-dataproof/applications/csv-import-verifier-ts
 npm ci
 npm run browser:install -- --with-deps
