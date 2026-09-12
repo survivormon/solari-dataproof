@@ -11,9 +11,10 @@ test(
   "benchmark: independent CSV matrix reproduces exact upstream defects and bounded patch results",
   // Sixteen serial browser runs include acknowledged but sometimes slow Windows shutdowns.
   { timeout: 300_000 },
-  async () => {
+  async (t) => {
     const { summary, directory } = await runBenchmark(
       join(packageRoot, "output", "benchmark", "tests"),
+      t.signal,
     )
     console.log(`Benchmark evidence: ${join(directory, "summary.json")}`)
     assert.equal(

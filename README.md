@@ -1,4 +1,37 @@
-# Solari Cookbook
+# Solari DataProof
+
+Verify that customer data survives a spreadsheet import and reload. DataProof drives a real browser, downloads CSV exports at both checkpoints, and compares every field with independently written expectations.
+
+The bundled demo reproduces two defects in a pinned version of [Spreadsheet Live](https://github.com/supunlakmal/spreadsheet): nonbreaking spaces change during export, and certain ampersands become literal `&amp;` after reload. Two targeted source patches make the same input pass.
+
+| Demo | Before reload | After reload | Result |
+| --- | ---: | ---: | --- |
+| Original app | 2 differences | 3 differences | FAIL |
+| With the two patches | 0 differences | 0 differences | PASS |
+
+### Try it locally
+
+Requires Node 22+. No Solari account is needed for this demo.
+
+```sh
+git clone https://github.com/survivormon/solari-dataproof.git
+cd solari-dataproof/applications/csv-import-verifier-ts
+npm ci
+npm run browser:install
+npm run spreadsheet:install
+npm run local
+npm run local -- --variant patched
+```
+
+The original app intentionally exits 1; run the patched command next. Open the printed HTML reports to inspect the exact changed values, screenshots, and downloaded CSVs.
+
+[Application and cloud usage](applications/csv-import-verifier-ts) · [Verification source](applications/csv-import-verifier-ts/src/compare.ts) · [Regression tests](applications/csv-import-verifier-ts/test) · [CI](https://github.com/survivormon/solari-dataproof/actions/workflows/dataproof.yml)
+
+Scope: one pinned spreadsheet, four customer-data columns, up to 50 records. Persistence is tested by reloading the app's URL fragment. Embedded CRLF normalization remains a known failing case. Cloud mode uses one Solari sandbox and one browser per run; cleanup failures prevent PASS.
+
+---
+
+## Solari Cookbook
 
 Short, runnable examples for [Solari](https://getsolari.com) — cloud browsers,
 sandboxes, and desktops behind one API key.

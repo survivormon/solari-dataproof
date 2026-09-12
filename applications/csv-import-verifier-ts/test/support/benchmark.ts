@@ -40,7 +40,11 @@ interface Result {
   report: string | null
 }
 
-export async function runBenchmark(outputRoot = join(packageRoot, "output", "benchmark")) {
+export async function runBenchmark(
+  outputRoot = join(packageRoot, "output", "benchmark"),
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted()
   const casesBytes = await readFile(new URL("./cases.json", import.meta.url))
   const catalog = JSON.parse(casesBytes.toString("utf8")) as {
     schemaVersion: number
@@ -55,21 +59,26 @@ export async function runBenchmark(outputRoot = join(packageRoot, "output", "ben
   )
     throw new RunError("INVALID_BENCHMARK_CASES")
   for (const item of catalog.cases) parseExport(item.expected)
+  signal?.throwIfAborted()
   const directory = join(outputRoot, `benchmark-${randomUUID()}`),
     startedAt = new Date().toISOString()
   await mkdir(directory, { recursive: true })
+  signal?.throwIfAborted()
   const sourceManifest = await readFile(
     join(packageRoot, "upstream", "spreadsheet", "manifest.json"),
   )
+  signal?.throwIfAborted()
   const sourceSha256 = {
     upstream: (await spreadsheetFiles(undefined, "upstream")).sha256,
     patched: (await spreadsheetFiles(undefined, "patched")).sha256,
   }
+  signal?.throwIfAborted()
   await writeFile(join(directory, "cases.json"), casesBytes, { flag: "wx" })
   await writeFile(join(directory, "source-manifest.json"), sourceManifest, { flag: "wx" })
   // Freeze every CSV and independent JSON oracle before starting any browser run.
   const inputs = await Promise.all(
     catalog.cases.map(async (item) => {
+      signal?.throwIfAborted()
       const root = join(directory, "inputs", item.id)
       await mkdir(root, { recursive: true })
       const csv = Buffer.from(item.csv),
@@ -87,6 +96,8 @@ export async function runBenchmark(outputRoot = join(packageRoot, "output", "ben
   }
   for (const variant of ["upstream", "patched"] as const) {
     for (const { item, input, inputSha256, expectedSha256 } of inputs) {
+      // Let the current run finish cleanup, but never acquire another browser after cancellation.
+      signal?.throwIfAborted()
       const result: Result = {
         id: item.id,
         variant,
@@ -151,6 +162,7 @@ export async function runBenchmark(outputRoot = join(packageRoot, "output", "ben
       results.push(result)
     }
   }
+  signal?.throwIfAborted()
   const summary = {
     schemaVersion: 1,
     startedAt,

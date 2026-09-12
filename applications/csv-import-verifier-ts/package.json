@@ -8,6 +8,7 @@
     "local": "tsx src/spreadsheet-cli.ts",
     "solari:recover": "tsx src/recovery-cli.ts",
     "spreadsheet:install": "tsx src/spreadsheet-install.ts",
+    "check": "npm run typecheck && npm test && npm run test:e2e",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "test:e2e": "tsx --test --test-concurrency=1 test/*.e2e.ts",
