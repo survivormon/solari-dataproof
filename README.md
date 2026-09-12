@@ -9,9 +9,11 @@ The bundled demo reproduces two defects in a pinned version of [Spreadsheet Live
 | Original app | 2 differences | 3 differences | FAIL |
 | With the two patches | 0 differences | 0 differences | PASS |
 
+[Download the recorded live evidence](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.1.0) for an install-free walkthrough. Extract the ZIP and open `dataproof-evidence/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
+
 ### Try it locally
 
-Requires Node 22+. No Solari account is needed for this demo.
+Validated on Ubuntu 24.04 with Node 22 and 24. No Solari account is needed for this demo.
 
 ```sh
 git clone https://github.com/survivormon/solari-dataproof.git
@@ -26,6 +28,8 @@ npm run local -- --variant patched
 The original app intentionally exits 1; run the patched command next. Open the printed HTML reports to inspect the exact changed values, screenshots, and downloaded CSVs.
 
 [Application and cloud usage](applications/csv-import-verifier-ts) · [Verification source](applications/csv-import-verifier-ts/src/compare.ts) · [Regression tests](applications/csv-import-verifier-ts/test) · [CI](https://github.com/survivormon/solari-dataproof/actions/workflows/dataproof.yml)
+
+Windows limitation: this validation host intermittently exceeded Chromium's shutdown deadline, including the small demo. Those runs report `INFRA_ERROR`; Windows local-browser reliability is not release-validated. Use the validated Ubuntu environment for the local demo.
 
 Scope: one pinned spreadsheet, four customer-data columns, up to 50 records. Persistence is tested by reloading the app's URL fragment. Embedded CRLF normalization remains a known failing case. Cloud mode uses one Solari sandbox and one browser per run; cleanup failures prevent PASS.
 

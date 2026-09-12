@@ -6,9 +6,11 @@ reproduces two data-preservation bugs in Spreadsheet Live, then passes with two
 small source patches. An HTML report shows the exact changed values, screenshots,
 and exported CSVs. Both exports must match for PASS.
 
+[Download the recorded live evidence](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.1.0) for an install-free walkthrough. Extract the ZIP and open `dataproof-evidence/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
+
 ## Run the local demo
 
-Requires Node 22+ and npm. No Solari account or API key is needed for this demo.
+Requires Node 22+ and npm. Release validation targets Ubuntu 24.04 with Node 22 and 24. No Solari account or API key is needed for this demo.
 From the repository root:
 
 ```sh
@@ -41,6 +43,16 @@ The demo exposes two defects: ampersands become literal `&amp;` after reload in
 certain notes, and export replaces nonbreaking spaces. `--variant patched` applies
 two in-memory fixes from `src/spreadsheet-source.ts`; the verified upstream cache
 stays unchanged. Embedded CRLF still becomes LF, and the tests retain that failure.
+
+### Windows limitation
+
+On the Windows validation host, pinned Chromium intermittently exceeded the
+35-second browser cleanup deadline, including the small README demo. The full
+Windows matrix and that demo failed with `INFRA_ERROR`; successful data comparison
+did not override incomplete cleanup. Windows local-browser reliability is not
+release-validated. Use Ubuntu 24.04 with Node 22 or 24 for the validated local path.
+The benchmark now honors test cancellation and stops starting new cases after a
+deadline; the current case keeps its existing cleanup path.
 
 ## Custom data and limits
 
