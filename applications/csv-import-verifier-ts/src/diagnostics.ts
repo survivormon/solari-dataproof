@@ -71,8 +71,6 @@ export function describeError(code: string, stage?: string): string {
       return "The run was interrupted. Preserve any available evidence; an interrupted run cannot be treated as a completed verification."
     case "DEMO_INPUT_CHANGED":
       return "The bundled demonstration input or expectation differs from its frozen hash. Preserve the changed files and restore the reviewed sample before running the demonstration."
-    case "DEMO_SETUP_FAILED":
-      return "Demonstration preflight failed. Check the locked dependencies with npm ci, then verify the spreadsheet source and Chromium installations before rerunning."
     case "DEMO_RUN_FAILED":
       return "The demonstration could not finish. Preserve its available reports and inspect the failed case before rerunning."
     case "DEMO_UNEXPECTED_RESULT":

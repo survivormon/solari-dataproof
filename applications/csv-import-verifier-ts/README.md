@@ -6,34 +6,36 @@ reproduces two data-preservation bugs in Spreadsheet Live, then passes with two
 small source patches. An HTML report shows the exact changed values, screenshots,
 and exported CSVs. Both exports must match for PASS.
 
-[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.0) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
+[Download the recorded demo](https://github.com/survivormon/solari-dataproof/releases/tag/dataproof-v0.2.1) for an install-free walkthrough. Extract the ZIP and open `dataproof-demo/index.html`; it includes the dated reports, raw CSVs, screenshots, and artifact hashes.
 
 ## Run the local demo
 
-Requires Node 22+ and npm. Release validation targets Ubuntu 24.04 with Node 22 and 24. No Solari account or API key is needed for this demo.
-From the repository root:
+Use Ubuntu 24.04 with Node 22 or 24 and npm for the supported local path. Installation needs network access; installing browser system libraries may request sudo. No Solari account or API key is needed. Windows browser shutdown remains intermittently unreliable; use the recorded demo there.
+From the repository root of tag `dataproof-v0.2.1`:
 
 ```sh
 cd applications/csv-import-verifier-ts
 npm ci
 npm run spreadsheet:install
-npm run browser:install
+npm run browser:install -- --with-deps
 npm run demo
 ```
 
-One command runs the original and patched app, then prints a link to a single
-comparison report. Exit `0` means **Demo verified**: the exact original defects
+One command runs the original and patched app, then prints a `file://` link to
+`output/demo/<run-id>/index.html`. Open it in your browser; it does not open automatically.
+Exit `0` means **Demo verified**: the exact original defects
 were reproduced, the patched exports matched at both checkpoints, the input and
 source hashes matched the frozen demo, and all resources closed. The original
 case retains its expected `FAIL` verdict inside the report.
 
-Add `--headed` to watch the browser. On Linux, install browser system dependencies
-with `npm run browser:install -- --with-deps` if needed. The installed demo runs
-locally without external service calls.
+Use `npm run demo -- --headed` to watch the browser on a desktop. The installed
+demo runs locally without external service calls.
 
 Each attempt keeps a new report under `output/demo/`. Cancellation, incomplete
 cleanup, or an unexpected result stops the sequence and retains completed
 evidence. The summary never treats partial execution as a verified demonstration.
+If reload or the second export fails, the report still shows the completed
+first comparison while retaining an execution-failure verdict.
 Local browser work has a 120-second deadline per case, followed by a separate
 48-second cleanup budget. Browser shutdown remains capped at 35 seconds.
 
@@ -98,7 +100,9 @@ npm start -- --live --variant patched
 ```
 
 Cloud work stops at 120 seconds, with cleanup allowed until 180 seconds. Failed or
-unconfirmed cleanup prevents PASS. If interrupted, inspect the printed private
+unconfirmed cleanup prevents PASS. A separate process watchdog forcibly stops an
+unresponsive worker at 200 seconds. Interruption remains a failed run even when it
+arrives during cleanup. If interrupted or forcibly stopped, inspect the printed private
 `.solari-state/` journal and use `npm run solari:recover -- --file <journal> --live`.
 Recovery addresses recorded resources only; do not automatically retry failed runs.
 
@@ -114,6 +118,8 @@ This runs TypeScript checking, unit tests, and browser E2E tests in order. Tests
 use local browsers and doubles, including an eight-case upstream/patched regression
 matrix. The path-scoped GitHub Actions workflow runs the same checks on Ubuntu with
 Node 22 and 24. It does not exercise the live Solari service.
+After the checks, CI also runs `npm run demo` and retains its comparison report,
+raw exports, and screenshots as a downloadable artifact for each Node version.
 
 Start with `index.ts`, `src/spreadsheet-adapter.ts` for the UI workflow, and
 `src/compare.ts` for exact comparison. Remote ownership and cleanup are in

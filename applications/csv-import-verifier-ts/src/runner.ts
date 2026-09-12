@@ -256,6 +256,11 @@ export async function runVerification(
       }),
     )
     const activePage = page
+    const compareExport = async (path: string) => {
+      const bytes = await guard(() => readFile(path, { signal }))
+      checkActive()
+      return compare(expected, parseExport(JSON.parse(decodeUtf8(bytes))))
+    }
     const observed = await guard(
       () =>
         dependencies.adapter(activePage, {
@@ -268,6 +273,14 @@ export async function runVerification(
             checkActive()
             step(name)
           },
+          onCheckpoint: async (phase, path, successMessage) => {
+            const comparison = await compareExport(path)
+            // A callback completing after cancellation must not change the saved verdict.
+            checkActive()
+            if (phase === "beforeReload") report.beforeReloadComparison = comparison
+            else report.comparison = comparison
+            report.successMessage = successMessage
+          },
           validateArtifact: dependencies.validateArtifact,
         }),
       120_000,
@@ -275,13 +288,9 @@ export async function runVerification(
     checkActive()
     report.successMessage = observed.successMessage
     step("compare")
-    const compareExport = async (path: string) => {
-      const bytes = await guard(() => readFile(path, { signal }))
-      checkActive()
-      return compare(expected, parseExport(JSON.parse(decodeUtf8(bytes))))
-    }
-    report.beforeReloadComparison = await compareExport(observed.beforeReloadPath)
-    report.comparison = await compareExport(observed.exportPath)
+    // Adapters without incremental checkpoints still return their completed exports.
+    report.beforeReloadComparison ??= await compareExport(observed.beforeReloadPath)
+    report.comparison ??= await compareExport(observed.exportPath)
     checkActive()
     report.outcome = differenceCount(report) ? "FAIL" : "PASS"
   } catch (error) {

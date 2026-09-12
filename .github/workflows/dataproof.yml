@@ -41,3 +41,13 @@ jobs:
         run: npm run spreadsheet:install
       - name: Typecheck, unit tests, and browser E2E tests
         run: npm run check
+      - name: Run the documented demo command
+        run: npm run demo
+      - name: Retain the demo evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dataproof-demo-node-${{ matrix.node }}
+          path: applications/csv-import-verifier-ts/output/demo/
+          if-no-files-found: warn
+          retention-days: 14

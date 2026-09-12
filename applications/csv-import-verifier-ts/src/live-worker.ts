@@ -6,8 +6,8 @@ import { bundleSpreadsheet } from "./bundle.js"
 import { Secrets } from "./secrets.js"
 import { packageRoot } from "./runner.js"
 import { createJournal } from "./recovery.js"
-import { RunError } from "./model.js"
 import { readSpreadsheetInput, runSpreadsheet } from "./spreadsheet.js"
+import { workerCancellation } from "./worker-process.js"
 
 // Defense in depth: direct invocation still requires the live flag before reading a key/importing the live driver.
 async function main(): Promise<number> {
@@ -27,9 +27,7 @@ async function main(): Promise<number> {
   const journal = createJournal(packageRoot)
   console.log(`Private recovery journal: ${journal.path}`)
   const budget = new Budget()
-  const interrupt = () => budget.work.abort(new RunError("INTERRUPTED"))
-  process.once("SIGINT", interrupt)
-  process.once("SIGTERM", interrupt)
+  const cancellation = await workerCancellation(budget)
   try {
     const { createLiveDriver } = await import("./solari-driver.js")
     const { solariDependencies } = await import("./solari.js")
@@ -42,14 +40,16 @@ async function main(): Promise<number> {
       secrets,
       journal.record,
     )
-    const { report, directory } = await runSpreadsheet(args.options, dependencies)
+    const { report, directory } = await runSpreadsheet(
+      { ...args.options, signal: cancellation.signal },
+      dependencies,
+    )
     console.log(`${report.outcome}: ${differenceCount(report) ?? "unavailable"} differences`)
     if (report.error) console.log(`${report.error.stage}: ${report.error.code}`)
     console.log(`Report: ${join(directory, "report.html")}`)
     return report.outcome === "PASS" ? 0 : report.outcome === "FAIL" ? 1 : 3
   } finally {
-    process.off("SIGINT", interrupt)
-    process.off("SIGTERM", interrupt)
+    cancellation.dispose()
     budget.dispose()
   }
 }

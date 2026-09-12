@@ -14,6 +14,7 @@ import { renderReport } from "../src/report.js"
 import { removeTestDirectory } from "./temp.js"
 import { RunError } from "../src/model.js"
 import type { ImportAdapter } from "../src/spreadsheet-adapter.js"
+import { workerCancellation } from "../src/worker-process.js"
 
 const syntheticKey = "slr_live_synthetic_test_only_123456"
 const sandboxId = "private-sandbox-capability",
@@ -116,6 +117,7 @@ async function runFake(
   root: string,
   fake: ReturnType<typeof fakeDriver>,
   budget = new Budget(limits),
+  signal?: AbortSignal,
 ) {
   const secrets = new Secrets()
   secrets.add(syntheticKey)
@@ -128,7 +130,7 @@ async function runFake(
     return { exportPath, beforeReloadPath: exportPath, successMessage: "Import successful" }
   }
   try {
-    return await runWithTestInput({ outputRoot: root }, { ...deps, adapter })
+    return await runWithTestInput({ outputRoot: root, signal }, { ...deps, adapter })
   } finally {
     budget.dispose()
   }
@@ -267,25 +269,38 @@ test("failed browser deletion still attempts sandbox deletion; acknowledgements 
   }
 })
 
-test("a late create response is owned during cleanup, with no subsequent browser creation", async () => {
+test("a late create response is owned during cleanup, with no subsequent browser creation", { timeout: 5_000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "csv-solari-late-"))
   try {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
     const fake = fakeDriver(),
       original = fake.driver.request
+    let dispatched!: () => void, release!: () => void
+    const started = new Promise<void>((resolve) => { dispatched = resolve })
+    const response = new Promise<void>((resolve) => { release = resolve })
     fake.driver.request = async (...args) => {
-      if (args[0] === "POST") await new Promise((resolve) => setTimeout(resolve, 150))
+      if (args[0] === "POST") {
+        dispatched()
+        await response
+      }
       return original(...args)
     }
-    const { report } = await runFake(
+    const running = runFake(
       root,
       fake,
       new Budget({ ...limits, operationMs: 50, cleanupCallMs: 500 }),
     )
+    await started
+    t.mock.timers.tick(51)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    release()
+    const { report } = await running
     assert.equal(report.outcome, "INFRA_ERROR")
     assert.equal(report.error?.code, "DEADLINE_EXCEEDED")
     assert.ok(fake.calls.some((c) => c.method === "DELETE" && c.path.includes(sandboxId)))
     assert.ok(!fake.calls.some((c) => c.method === "POST" && c.path === "/sessions"))
   } finally {
+    t.mock.timers.reset()
     await removeTestDirectory(root)
   }
 })
@@ -400,6 +415,47 @@ test("unexpected preview hosts and explicit DELETE rejection fail closed", async
         )
     }
   } finally {
+    await removeTestDirectory(root)
+  }
+})
+
+test("cloud interruption during cleanup preserves its verdict and completes all owned cleanup", async () => {
+  const root = await mkdtemp(join(tmpdir(), "csv-solari-cleanup-interrupt-"))
+  const budget = new Budget(limits)
+  const cancellation = await workerCancellation(budget)
+  try {
+    const fake = fakeDriver(), originalBrowser = fake.driver.browser
+    fake.driver.browser = async (...args) => {
+      const browser = await originalBrowser(...args) as Browser
+      const originalContext = browser.newContext.bind(browser)
+      browser.newContext = async (...contextArgs) => {
+        const context = await originalContext(...contextArgs), close = context.close.bind(context)
+        context.close = async () => {
+          assert.equal(budget.cleaning, true)
+          process.emit("SIGINT")
+          process.emit("SIGTERM")
+          await close()
+        }
+        return context
+      }
+      return browser
+    }
+    const { report, directory } = await runFake(root, fake, budget, cancellation.signal)
+    assert.equal(report.outcome, "INFRA_ERROR")
+    assert.deepEqual(report.error, { stage: "cleanup", code: "INTERRUPTED" })
+    assert.equal(report.comparison?.differences.length, 0)
+    assert.deepEqual(fake.closed, ["context", "browser", "sandbox channel"])
+    assert.deepEqual(fake.calls.filter((call) => call.method === "DELETE").map((call) => call.path), [
+      `/sessions/${browserId}`, `/sandboxes/${sandboxId}`,
+    ])
+    assert.equal(report.cleanup.filter((item) => item.status === "API_CONFIRMED").length, 2)
+    assert.ok(report.cleanup.every((item) => !["FAILED", "UNCONFIRMED"].includes(item.status)))
+    const saved = JSON.parse(await readFile(join(directory, "report.json"), "utf8"))
+    assert.equal(saved.outcome, "INFRA_ERROR")
+    assert.deepEqual(saved.error, report.error)
+  } finally {
+    cancellation.dispose()
+    budget.dispose()
     await removeTestDirectory(root)
   }
 })

@@ -3,11 +3,13 @@ import assert from "node:assert/strict"
 import { mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { Readable } from "node:stream"
 import test from "node:test"
 import { errors, type Browser } from "playwright"
 import { packageRoot, type Dependencies } from "../src/runner.js"
 import { RunError } from "../src/model.js"
 import { differenceCount, renderReport } from "../src/report.js"
+import { spreadsheetAdapter, type AdapterInput, type ImportAdapter } from "../src/spreadsheet-adapter.js"
 import { removeTestDirectory } from "./temp.js"
 
 function deferred() {
@@ -18,7 +20,11 @@ function deferred() {
   return { promise, resolve }
 }
 
-function fakeDependencies(failAt = "", closeFailures: string[] = []) {
+function fakeDependencies(
+  failAt = "",
+  closeFailures: string[] = [],
+  page?: Parameters<ImportAdapter>[0],
+) {
   const closed: string[] = []
   const acquire = (name: string) => {
     if (failAt === name) throw new RunError("INJECTED_FAILURE")
@@ -47,7 +53,7 @@ function fakeDependencies(failAt = "", closeFailures: string[] = []) {
             route: async () => {},
             newPage: async () => {
               acquire("page")
-              return { isClosed: () => true }
+              return page ?? { isClosed: () => true }
             },
           }
         },
@@ -70,6 +76,123 @@ function fakeDependencies(failAt = "", closeFailures: string[] = []) {
   }
   return { dependencies, closed }
 }
+
+for (const failure of ["reload", "second download", "malformed second export"] as const) {
+  test(`a ${failure} failure preserves the real adapter's completed first checkpoint`, async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "csv-partial-checkpoint-"))
+    t.after(() => removeTestDirectory(root))
+    const csv = Buffer.from("source_row,customer_id,name,note\n2,0017,Ada,unchanged\n")
+    const expected = {
+      schemaVersion: 1,
+      accepted: [{ sourceRow: 2, customer_id: "0017", name: "Ada", note: "unchanged" }],
+      rejected: [],
+    }
+    // Cover both a matching first checkpoint and an observed data change.
+    const firstExport = failure === "reload"
+      ? csv
+      : Buffer.from(csv.toString().replace("unchanged", "changed"))
+    let downloads = 0
+    const locator = {
+      waitFor: async () => {},
+      click: async () => {},
+      setInputFiles: async () => {},
+      textContent: async () => "CSV imported successfully",
+      innerText: async () => "Synthetic test page",
+    }
+    const page = {
+      goto: async () => ({ ok: () => true }),
+      url: () => "http://127.0.0.1:1/",
+      locator: () => locator,
+      getByText: () => locator,
+      waitForURL: async () => {},
+      screenshot: async () => Buffer.alloc(0),
+      reload: async () => ({ ok: () => failure !== "reload" }),
+      isClosed: () => false,
+      waitForEvent: async () => {
+        const first = downloads++ === 0
+        const bytes = first ? firstExport : Buffer.from("malformed,export\n")
+        return {
+          url: () => "blob:http://127.0.0.1:1/test-export",
+          failure: async () => null,
+          createReadStream: async () => {
+            if (!first && failure === "second download") throw new Error("Download transfer failed")
+            return Readable.from([bytes])
+          },
+          cancel: async () => {},
+        }
+      },
+    } as unknown as Parameters<ImportAdapter>[0]
+    const fake = fakeDependencies("", [], page)
+    fake.dependencies.adapter = spreadsheetAdapter
+    const { report, directory } = await runWithTestInput(
+      { outputRoot: root, input: { csv, expected: Buffer.from(JSON.stringify(expected)) } },
+      fake.dependencies,
+    )
+    assert.equal(report.outcome, "INFRA_ERROR")
+    assert.deepEqual(report.error, failure === "reload"
+      ? { stage: "reload persisted import", code: "RELOAD_FAILED" }
+      : {
+          stage: "export",
+          code: failure === "second download" ? "EXPORT_TRANSFER_FAILED" : "INVALID_SPREADSHEET_EXPORT",
+        })
+    assert.equal(report.successMessage, "CSV imported successfully")
+    assert.equal(report.comparison, null)
+    assert.equal(report.beforeReloadComparison?.actualAccepted, 1)
+    assert.equal(report.beforeReloadComparison?.differences.length, failure === "reload" ? 0 : 1)
+    assert.deepEqual(await readFile(join(directory, "before-reload.csv")), firstExport)
+    const saved = JSON.parse(await readFile(join(directory, "report.json"), "utf8"))
+    assert.equal(saved.outcome, "INFRA_ERROR")
+    assert.deepEqual(saved.beforeReloadComparison, report.beforeReloadComparison)
+    assert.equal(saved.comparison, null)
+    assert.deepEqual(saved.error, report.error)
+    assert.equal(saved.successMessage, report.successMessage)
+    assert.deepEqual(fake.closed, ["context", "browser", "fixture"])
+    const html = await readFile(join(directory, "report.html"), "utf8")
+    assert.match(html, /Completed comparisons remain evidence/)
+    assert.match(html, /This run is incomplete and cannot be PASS/)
+    assert.match(html, /href="before-reload.csv"/)
+    assert.match(html, /Importer message: <strong>CSV imported successfully/)
+    assert.doesNotMatch(html, /No import verdict is available|No completed comparison/)
+    if (failure === "reload") assert.match(html, /Completed comparisons found no differences/)
+    else {
+      assert.equal(report.beforeReloadComparison?.differences[0]?.actual, "changed")
+      assert.match(html, /FIELD_CHANGED/)
+      assert.match(html, /Before reload<\/td>/)
+    }
+  })
+}
+
+test("a checkpoint callback after cancellation cannot mutate the completed failure report", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "csv-late-checkpoint-"))
+  t.after(() => removeTestDirectory(root))
+  const entered = deferred()
+  const controller = new AbortController()
+  let checkpoint!: NonNullable<AdapterInput["onCheckpoint"]>
+  const fake = fakeDependencies()
+  fake.dependencies.adapter = async (_page, input) => {
+    checkpoint = input.onCheckpoint!
+    entered.resolve()
+    return await new Promise(() => {})
+  }
+  const operation = runWithTestInput({ outputRoot: root, signal: controller.signal }, fake.dependencies)
+  await entered.promise
+  controller.abort()
+  const { report, directory } = await operation
+  const beforeCallback = structuredClone(report)
+  const saved = JSON.parse(await readFile(join(directory, "report.json"), "utf8"))
+  await assert.rejects(
+    checkpoint("beforeReload", join(directory, "expected.json"), "Late import notice"),
+    { code: "INTERRUPTED" },
+  )
+  assert.equal(report.outcome, "INFRA_ERROR")
+  assert.equal(report.beforeReloadComparison, undefined)
+  assert.equal(report.comparison, null)
+  assert.equal(report.successMessage, null)
+  assert.deepEqual(report, beforeCallback)
+  assert.equal(saved.outcome, "INFRA_ERROR")
+  assert.equal(saved.beforeReloadComparison, undefined)
+  assert.equal(saved.comparison, null)
+})
 
 test("corruption before reload cannot be hidden by a later matching export", async () => {
   const root = await mkdtemp(join(tmpdir(), "csv-checkpoints-"))

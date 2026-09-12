@@ -1,6 +1,5 @@
 // Verify a spreadsheet CSV round trip with a Solari browser and sandbox.
 // Use --plan to inspect resource limits, or --live to run the check.
-import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { resolve } from "node:path"
 import { browserEnvironment } from "./src/runner.js"
@@ -8,6 +7,7 @@ import { LIVE_LIMITS } from "./src/budget.js"
 import { RunError } from "./src/model.js"
 import { parseSpreadsheetArgs } from "./src/spreadsheet-cli.js"
 import type { SpreadsheetOptions } from "./src/spreadsheet.js"
+import { runNodeWorker } from "./src/worker-process.js"
 
 export const liveUsage = `Solari CSV import verifier
   npm start -- --plan
@@ -46,20 +46,10 @@ const defaults: CliDependencies = {
   key: () => process.env.SOLARI_API_KEY,
   output: (text) => console.log(text),
   execute: (args, env) =>
-    new Promise((resolve) => {
-      const child = spawn(
-        process.execPath,
-        ["--import", "tsx", fileURLToPath(new URL("src/live-worker.ts", import.meta.url)), ...args],
-        {
-          env,
-          stdio: ["ignore", "inherit", "inherit"],
-          windowsHide: true,
-          timeout: 200_000,
-        },
-      )
-      child.once("error", () => resolve(3))
-      child.once("exit", (code) => resolve(code ?? 3))
-    }),
+    runNodeWorker(
+      ["--import", "tsx", fileURLToPath(new URL("src/live-worker.ts", import.meta.url)), ...args],
+      env,
+    ),
 }
 
 export async function liveMain(

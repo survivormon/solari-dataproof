@@ -60,6 +60,5 @@ test("demo contract failures preserve frozen samples and unexpected evidence", (
   assert.match(describeError("DEMO_INPUT_CHANGED"), /Preserve the changed files/)
   assert.match(describeError("DEMO_UNEXPECTED_RESULT"), /do not change the expected result/)
   assert.match(describeError("DEMO_INTERRUPTED"), /interrupted/)
-  assert.match(describeError("DEMO_SETUP_FAILED"), /npm ci/)
   assert.match(describeError("DEMO_RUN_FAILED"), /available reports/)
 })

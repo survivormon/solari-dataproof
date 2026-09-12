@@ -12,6 +12,11 @@ export interface AdapterInput {
   timeoutMs: number
   signal?: AbortSignal
   onStep(step: string): void
+  onCheckpoint?(
+    phase: "beforeReload" | "afterReload",
+    exportPath: string,
+    successMessage: string,
+  ): Promise<void>
   validateArtifact?(bytes: Buffer | string): void
 }
 export interface AdapterResult {
@@ -105,6 +110,7 @@ export const spreadsheetAdapter: ImportAdapter = async (page, input) => {
   })
   input.onStep("export before reload")
   const beforeReloadPath = await exportCSV("before-reload")
+  await input.onCheckpoint?.("beforeReload", beforeReloadPath, successMessage)
 
   input.onStep("reload persisted import")
   const reload = await page.reload()
@@ -116,5 +122,6 @@ export const spreadsheetAdapter: ImportAdapter = async (page, input) => {
   input.onStep("export")
   // Raw browser output is retained before normalization for independent review.
   const exportPath = await exportCSV("observed")
+  await input.onCheckpoint?.("afterReload", exportPath, successMessage)
   return { exportPath, beforeReloadPath, successMessage }
 }
